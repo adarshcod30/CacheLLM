@@ -28,8 +28,14 @@ def registry(default: str = "openai") -> ProviderRegistry:
 
 # ------------------------------------------------------------------ the default
 def test_the_default_provider_is_one_a_plain_install_can_reach() -> None:
-    """AWS is an optional extra, so it cannot be the fallback."""
-    assert Settings(_env_file=None).default_provider == "openai"
+    """AWS is an optional extra, so it cannot be the fallback.
+
+    Read the declared field default rather than instantiating Settings: an
+    instance still picks up CACHELLM_DEFAULT_PROVIDER from the environment, and
+    CI sets that, so instantiating would test the runner's configuration rather
+    than what the code ships.
+    """
+    assert Settings.model_fields["default_provider"].default == "openai"
 
 
 # ------------------------------------------------- rule 1: explicit prefixes
