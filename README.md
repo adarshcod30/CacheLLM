@@ -224,8 +224,14 @@ MiniLM gives four times the safe recall of bge-small at a third of the download 
 You need Python 3.11 or newer and a Redis 8 instance. Redis 8 is required because the vector index needs the query engine, and it must be database 0 because Redis Search only indexes that one.
 
 ```bash
+pip install cachellm
+```
+
+Or from source, which is what you want if you plan to change anything:
+
+```bash
 git clone https://github.com/adarshcod30/CacheLLM.git
-cd cachellm
+cd CacheLLM
 uv sync
 ```
 
@@ -469,6 +475,15 @@ Tests use a deterministic hashing embedder, so CI needs no model download and re
 - **Per-tenant namespaces** with a scope header, so multi-tenant apps can cache safely.
 - **Embeddings pass-through** so `/v1/embeddings` can be cached too.
 - **Quora Question Pairs at scale** for a 150,000-pair evaluation alongside the hand-built corpus.
+
+## Releasing
+
+Tagging a version publishes to PyPI through Trusted Publishing, so no API token
+exists anywhere. See [docs/publishing.md](docs/publishing.md).
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
 
 ## Contributing
 
