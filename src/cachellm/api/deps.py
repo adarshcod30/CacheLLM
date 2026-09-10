@@ -28,6 +28,7 @@ from cachellm.cache.service import CacheService
 from cachellm.embeddings import build_embedder
 from cachellm.embeddings.base import Embedder
 from cachellm.observability.metrics import Metrics, get_metrics
+from cachellm.providers import detect
 from cachellm.providers.registry import ProviderRegistry
 from cachellm.settings import Settings
 
@@ -73,6 +74,15 @@ async def build_state(
     embedder: Embedder | None = None,
     providers: ProviderRegistry | None = None,
 ) -> AppState:
+    autoconfigured = detect.apply(settings)
+    if autoconfigured:
+        log.info(
+            "provider_autodetected",
+            using=autoconfigured,
+            hint="set CACHELLM_DEFAULT_PROVIDER or CACHELLM_OPENAI_BASE_URL to override; "
+            "run `cachellm providers` to see every option",
+        )
+
     state = AppState(
         settings=settings,
         metrics=get_metrics(),

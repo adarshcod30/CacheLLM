@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
-from cachellm import __version__
+from cachellm import __version__, report
 from cachellm.settings import get_settings
 
 app = typer.Typer(
@@ -57,8 +58,11 @@ def config() -> None:
 
 
 @app.command()
-def stats() -> None:
-    """Print cache statistics straight from Redis."""
+def stats(
+    limit: Annotated[int, typer.Option(help="How many recent requests to show.")] = 15,
+    json_out: Annotated[bool, typer.Option("--json", help="Raw JSON instead.")] = False,
+) -> None:
+    """Show what the cache has been doing: hit rate, savings, latency, recent requests."""
 
     async def run() -> None:
         from cachellm.api.deps import build_state, shutdown_state
@@ -66,14 +70,94 @@ def stats() -> None:
         settings = get_settings()
         state = await build_state(settings)
         try:
-            if state.cache is None:
+            if state.cache is None or state.analytics is None:
                 typer.secho(f"cache unavailable: {state.degraded_reason}", fg="red")
                 raise typer.Exit(1)
-            typer.echo(json.dumps(await state.cache.stats(), indent=2))
+            data = await state.cache.stats()
+            data["backend"] = state.backend
+            data["cache_available"] = True
+            data["caching_enabled"] = settings.enabled
+            recent = await state.analytics.recent_requests(limit=limit)
+            if json_out:
+                typer.echo(json.dumps({"stats": data, "recent": recent}, indent=2))
+                return
+            typer.echo(report.summary(data, settings.embedding_model))
+            typer.echo(report.request_table(recent, limit=limit))
         finally:
             await shutdown_state(state)
 
     asyncio.run(run())
+
+
+@app.command()
+def watch(
+    interval: Annotated[float, typer.Option(help="Seconds between refreshes.")] = 2.0,
+) -> None:
+    """Follow requests as they happen, like `tail -f` for the cache."""
+
+    async def run() -> None:
+        from cachellm.api.deps import build_state, shutdown_state
+
+        settings = get_settings()
+        state = await build_state(settings)
+        if state.cache is None or state.analytics is None:
+            typer.secho(f"cache unavailable: {state.degraded_reason}", fg="red")
+            raise typer.Exit(1)
+        seen: set[tuple[float, str]] = set()
+        typer.echo(f"watching {state.backend} backend, ctrl-c to stop\n")
+        try:
+            while True:
+                for record in reversed(await state.analytics.recent_requests(limit=50)):
+                    marker = (record.get("at", 0.0), record.get("prompt", ""))
+                    if marker in seen:
+                        continue
+                    seen.add(marker)
+                    typer.echo(report.request_line(record))
+                if len(seen) > 5_000:
+                    seen.clear()
+                await asyncio.sleep(interval)
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            data = await state.cache.stats()
+            data["backend"] = state.backend
+            data["cache_available"] = True
+            typer.echo(report.summary(data, settings.embedding_model))
+        finally:
+            await shutdown_state(state)
+
+    with contextlib.suppress(KeyboardInterrupt):
+        asyncio.run(run())
+
+
+@app.command()
+def providers() -> None:
+    """List every model host, and which ones this machine can already reach."""
+    from cachellm.providers.catalog import HOSTS
+    from cachellm.providers.detect import available
+
+    payload = {
+        "hosts": [
+            {
+                "name": h.name,
+                "env_key": h.env_key,
+                "pip_extra": h.extra,
+                "example_models": list(h.examples),
+            }
+            for h in HOSTS
+        ]
+    }
+    detected = [
+        {"name": d.host.name, "reason": d.reason, "key": d.host.key}
+        for d in available(include_fake=False)
+    ]
+    typer.echo(report.providers_table(payload, detected))
+    settings = get_settings()
+    if not detected:
+        typer.echo(
+            "  Nothing configured yet. To try it with no account at all:\n"
+            "    CACHELLM_DEFAULT_PROVIDER=fake cachellm serve\n"
+        )
+    elif not settings.openai_base_url_is_explicit and detected[0]["key"] != "bedrock":
+        typer.echo(f"  `cachellm serve` will use {detected[0]['name']}.\n")
 
 
 @app.command()

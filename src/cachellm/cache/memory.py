@@ -30,7 +30,7 @@ from typing import Any
 import numpy as np
 import structlog
 
-from cachellm.cache.analytics import NearMiss
+from cachellm.cache.analytics import NearMiss, RequestRecord, _trim_prompt
 from cachellm.cache.entry import CacheEntry
 from cachellm.settings import Settings
 
@@ -363,6 +363,7 @@ class MemoryAnalytics:
         self._counters: dict[str, float] = {}
         self._latency: dict[str, deque[float]] = {}
         self._near: deque[dict[str, Any]] = deque(maxlen=settings.near_miss_log_size)
+        self._log: deque[dict[str, Any]] = deque(maxlen=settings.request_log_size)
 
     async def incr(self, field: str, amount: int = 1) -> None:
         self._counters[field] = self._counters.get(field, 0.0) + amount
@@ -386,6 +387,15 @@ class MemoryAnalytics:
         self._counters.clear()
         self._latency.clear()
         self._near.clear()
+        self._log.clear()
+
+    async def record_request(self, record: RequestRecord) -> None:
+        payload = asdict(record)
+        payload["prompt"] = _trim_prompt(payload["prompt"], self._settings.log_prompts)
+        self._log.appendleft(payload)
+
+    async def recent_requests(self, limit: int = 50) -> list[dict[str, Any]]:
+        return list(self._log)[:limit]
 
     async def record_latency(self, result: str, ms: float) -> None:
         samples = self._latency.setdefault(result, deque(maxlen=5_000))

@@ -228,10 +228,22 @@ Python 3.11 or newer, and nothing else.
 
 ```bash
 pip install cachellm-proxy
-CACHELLM_DEFAULT_PROVIDER=fake CACHELLM_FAKE_LATENCY_MS=600 cachellm serve
+cachellm serve
 ```
 
-That is the whole install. No Redis, no Docker, no API key. The cache runs in the proxy's own memory and the built-in fake provider stands in for a model, so you can watch it work before spending anything.
+That is the whole install. No Redis, no Docker, no config file. On startup it looks for a provider you already have: an API key in your environment, Ollama running locally, or AWS credentials. It logs which one it picked and how to override it.
+
+To see what it found before starting anything:
+
+```bash
+cachellm providers
+```
+
+To try it with no account at all, the built-in test double stands in for a model:
+
+```bash
+CACHELLM_DEFAULT_PROVIDER=fake CACHELLM_FAKE_LATENCY_MS=600 cachellm serve
+```
 
 You only install what you actually route to. The base package is the proxy plus the local embedding model; AWS and Redis are extras, and nothing here installs Grafana or a Prometheus server, which are separate programs rather than Python packages.
 
@@ -402,12 +414,39 @@ curl -s http://localhost:8080/admin/threshold-sweep -H 'Content-Type: applicatio
 ### Command line
 
 ```bash
-uv run cachellm serve          # run the proxy
-uv run cachellm stats          # cache statistics
-uv run cachellm config         # effective configuration
-uv run cachellm invalidate --all
-uv run cachellm tune pairs.jsonl
+cachellm serve                 # run the proxy, auto-detecting a provider
+cachellm providers             # every host, and what this machine can reach
+cachellm stats                 # hit rate, savings, latency, recent requests
+cachellm watch                 # follow requests live, like tail -f
+cachellm config                # effective configuration
+cachellm invalidate --all
+cachellm tune pairs.jsonl
 ```
+
+`cachellm stats` is the dashboard, in your terminal:
+
+```
+  CacheLLM · memory backend · all-MiniLM-L6-v2
+
+  HIT RATE    77.0%  ████████████████░░░░░░  1,540 of 2,000 requests
+             1,265 exact · 275 semantic · 460 missed · 0 bypassed
+
+  SAVED      $0.0135   spent $0.0038  78% lower
+             116,029 tokens never generated
+
+  LATENCY    cached       2.6 ms p50 ·      5.7 ms p95
+             uncached   797.0 ms p50 ·   1022.8 ms p95   179x faster
+
+  CACHE      451 entries · 9 coalesced · 17 near misses
+
+  time      result tier        latency  score  saved       prompt
+  02:30:55  HIT    exact         1.2ms  1.000  +$0.000010  What is Redis used for?
+  02:30:54  BYPASS             451.5ms    ·          ·     What is my order 1234…  (pii:long_digits)
+  02:30:53  HIT    semantic      7.4ms  0.952  +$0.000011  What is Redis typically used for?
+  02:30:53  MISS               454.8ms    ·          ·     How do I configure nginx for TLS?
+```
+
+Prometheus and Grafana are still there if you want history and alerting, but nothing needs them.
 
 ## Configuration
 

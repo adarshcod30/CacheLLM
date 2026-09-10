@@ -12,6 +12,7 @@ looser threshold would have bought you, on your own traffic.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import time
 from dataclasses import asdict, dataclass
@@ -19,8 +20,36 @@ from typing import TYPE_CHECKING, Any
 
 from cachellm.settings import Settings
 
+
+def _trim_prompt(text: str, keep_full: bool) -> str:
+    """Prompts are sensitive; keep enough to recognise, no more."""
+    return text if keep_full else text[:96]
+
+
 if TYPE_CHECKING:  # redis is an optional extra; this module imports without it
     import redis.asyncio as aioredis
+
+
+@dataclass
+class RequestRecord:
+    """One line of the request log: what the cache did, and what it saved.
+
+    Prompt text is truncated and only kept at all so a person reading
+    `cachellm stats` can recognise their own traffic. Set
+    CACHELLM_LOG_PROMPTS=false (the default) and it is trimmed to a fingerprint.
+    """
+
+    at: float
+    status: str  # HIT | MISS | BYPASS | SHADOW
+    tier: str  # exact | semantic | ""
+    similarity: float
+    category: str
+    model: str
+    latency_ms: float
+    saved_usd: float
+    spent_usd: float
+    prompt: str
+    reason: str = ""  # why it was bypassed, when it was
 
 
 @dataclass
@@ -41,6 +70,7 @@ class Analytics:
         self._settings = settings
         self._counters = f"{settings.stats_prefix}counters"
         self._near = f"{settings.stats_prefix}near_misses"
+        self._log = f"{settings.stats_prefix}requests"
         self._latency = f"{settings.stats_prefix}latency"
 
     # ------------------------------------------------------------------ counters
@@ -74,7 +104,7 @@ class Analytics:
         return out
 
     async def reset(self) -> None:
-        await self._redis.delete(self._counters, self._near, self._latency)
+        await self._redis.delete(self._counters, self._near, self._latency, self._log)
 
     # ---------------------------------------------------------------- latency
     async def record_latency(self, result: str, ms: float) -> None:
@@ -100,6 +130,21 @@ class Analytics:
             "min": round(values[0], 2),
             "max": round(values[-1], 2),
         }
+
+    # -------------------------------------------------------------- request log
+    async def record_request(self, record: RequestRecord) -> None:
+        payload = asdict(record)
+        payload["prompt"] = _trim_prompt(payload["prompt"], self._settings.log_prompts)
+        await self._redis.lpush(self._log, json.dumps(payload))
+        await self._redis.ltrim(self._log, 0, self._settings.request_log_size - 1)
+
+    async def recent_requests(self, limit: int = 50) -> list[dict[str, Any]]:
+        raw = await self._redis.lrange(self._log, 0, limit - 1)
+        out: list[dict[str, Any]] = []
+        for item in raw:
+            with contextlib.suppress(json.JSONDecodeError):
+                out.append(json.loads(item))
+        return out
 
     # -------------------------------------------------------------- near misses
     async def record_near_miss(self, miss: NearMiss) -> None:

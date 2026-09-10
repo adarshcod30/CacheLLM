@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from cachellm.api import sse
 from cachellm.api.auth import verify
 from cachellm.api.deps import AppState, get_state
+from cachellm.cache.analytics import RequestRecord
 from cachellm.cache.entry import CacheEntry
 from cachellm.cache.keys import prompt_fingerprint
 from cachellm.cache.policy import PolicyDecision
@@ -95,7 +96,14 @@ def _debug_block(lookup: LookupResult, saved_usd: float, coalesced: bool) -> dic
 
 
 async def _record_outcome(
-    state: AppState, lookup: LookupResult, model: str, provider: str, total_ms: float
+    state: AppState,
+    lookup: LookupResult,
+    model: str,
+    provider: str,
+    total_ms: float,
+    saved_usd: float = 0.0,
+    spent_usd: float = 0.0,
+    prompt: str = "",
 ) -> None:
     metrics = state.metrics
     result = lookup.status
@@ -120,6 +128,29 @@ async def _record_outcome(
             counters["shadow_hits"] = 1
         await state.analytics.bulk(counters)
         await state.analytics.record_latency("hit" if result == "hit" else "miss", total_ms)
+        # The request log is what `cachellm stats` and `cachellm watch` read, so
+        # a person can see which of their own requests hit without a dashboard.
+        await state.analytics.record_request(
+            RequestRecord(
+                at=time.time(),
+                status={"hit": "HIT", "miss": "MISS", "bypass": "BYPASS", "shadow_hit": "SHADOW"}[
+                    result
+                ],
+                tier=lookup.tier,
+                similarity=round(lookup.similarity, 4),
+                category=lookup.category,
+                model=model,
+                latency_ms=round(total_ms, 2),
+                saved_usd=saved_usd,
+                spent_usd=spent_usd,
+                # A bypassed request never reaches the point where cache_text is
+                # set, so the route passes the prompt in; without it the log
+                # would show blank rows for exactly the requests you most want
+                # to understand.
+                prompt=lookup.cache_text or prompt,
+                reason=lookup.decision.bypass_reason,
+            )
+        )
 
 
 @router.get("/models", response_model=ModelList)
@@ -178,7 +209,15 @@ async def chat_completions(request: Request, body: ChatCompletionRequest) -> Any
                 body.model, entry.prompt_tokens, entry.completion_tokens, "saved"
             )
             total_ms = (time.perf_counter() - started) * 1000
-            await _record_outcome(state, lookup, body.model, provider_name, total_ms)
+            await _record_outcome(
+                state,
+                lookup,
+                body.model,
+                provider_name,
+                total_ms,
+                saved_usd=saved,
+                prompt=body.last_user_text(),
+            )
             headers = cache_headers(lookup, total_ms=total_ms, saved_usd=saved)
             if body.stream:
                 return _replay_stream(body, entry, headers)
@@ -256,7 +295,15 @@ async def _proxy_once(
         await state.analytics.incr_float("usd_spent", spent)
 
     total_ms = (time.perf_counter() - started) * 1000
-    await _record_outcome(state, lookup, body.model, provider_name, total_ms)
+    await _record_outcome(
+        state,
+        lookup,
+        body.model,
+        provider_name,
+        total_ms,
+        spent_usd=spent,
+        prompt=body.last_user_text(),
+    )
 
     payload = ChatCompletionResponse.from_text(
         model=body.model,
@@ -375,7 +422,15 @@ async def _proxy_stream(
         if state.analytics is not None:
             await state.analytics.incr_float("usd_spent", spent)
         total_ms = (time.perf_counter() - started) * 1000
-        await _record_outcome(state, lookup, body.model, provider_name, total_ms)
+        await _record_outcome(
+            state,
+            lookup,
+            body.model,
+            provider_name,
+            total_ms,
+            spent_usd=spent,
+            prompt=body.last_user_text(),
+        )
 
     total_ms = (time.perf_counter() - started) * 1000
     return StreamingResponse(

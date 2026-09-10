@@ -121,6 +121,8 @@ class Settings(BaseSettings):
     #: A miss within this margin of the threshold is recorded as a near miss.
     near_miss_margin: float = 0.06
     near_miss_log_size: int = 500
+    #: How many recent requests to keep for `cachellm stats` and `cachellm watch`.
+    request_log_size: int = 500
 
     #: 0.0 means "use the calibrated value for the configured embedding model".
     #: Set any of these explicitly to override the calibration.
@@ -199,6 +201,13 @@ class Settings(BaseSettings):
         return v
 
     # ------------------------------------------------------------------ helpers
+    @property
+    def openai_base_url_is_explicit(self) -> bool:
+        """True when the operator chose an endpoint, so detection must not override it."""
+        import os
+
+        return bool(os.environ.get("CACHELLM_OPENAI_BASE_URL", "").strip())
+
     @property
     def client_keys(self) -> set[str]:
         return {k.strip() for k in self.api_keys.split(",") if k.strip()}

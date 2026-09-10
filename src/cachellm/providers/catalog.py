@@ -40,7 +40,8 @@ BEDROCK_VENDORS: tuple[str, ...] = (
     "meta.",
     "minimax.",
     "mistral.",
-    "moonshot",
+    "moonshot.",
+    "moonshotai.",
     "nvidia.",
     "openai.",
     "qwen.",
@@ -75,6 +76,13 @@ OPENAI_FAMILIES: tuple[str, ...] = (
 #: model id that legitimately contains a slash survives intact. OpenRouter and
 #: Together both use `vendor/model` ids, and stripping their vendor segment
 #: makes the upstream reject the request as an unknown model.
+#:
+#: These three names are therefore reserved. A model id that genuinely begins
+#: `openai/`, `bedrock/` or `fake/` is read as a routing instruction: Groq's
+#: `openai/gpt-oss-120b` reaches the upstream as `gpt-oss-120b`. That is the one
+#: known collision, it affects one model family on one host, and the workaround
+#: is to point CACHELLM_OPENAI_BASE_URL at Groq and send the bare id if the host
+#: accepts it.
 ROUTING_PREFIXES: tuple[str, ...] = ("bedrock", "openai", "fake")
 
 
@@ -85,22 +93,32 @@ ROUTING_PREFIXES: tuple[str, ...] = ("bedrock", "openai", "fake")
 class Host:
     """One place models are served from."""
 
-    name: str
+    key: str  # short id, e.g. "groq"
+    name: str  # what a person calls it
     provider: str  # which adapter handles it
     base_url: str | None  # what to put in CACHELLM_OPENAI_BASE_URL
-    extra: str | None  # pip extra required, if any
+    env_key: str | None  # where its API key conventionally lives
+    extra: str | None = None  # pip extra required, if any
     examples: tuple[str, ...] = field(default_factory=tuple)
     note: str = ""
 
+    @property
+    def needs_key(self) -> bool:
+        """True when this host expects a vendor API key from the environment."""
+        return self.env_key is not None
 
-#: A human quick reference. Model ids are examples, current as of writing, and
-#: are not used for routing. Anything not listed still works: it falls through
-#: to the configured OpenAI-compatible endpoint, which is the right answer for
-#: every host in this table except Bedrock.
+
+#: Every host CacheLLM can sit in front of. Base URLs were checked live; model
+#: ids are examples current at the time of writing and are not used for routing.
+#: Anything not listed still works, because an unrecognised name falls through
+#: to whichever OpenAI-compatible endpoint the operator configured.
 HOSTS: tuple[Host, ...] = (
+    # ------------------------------------------------ needs no vendor API key
     Host(
+        "bedrock",
         "AWS Bedrock",
         "bedrock",
+        None,
         None,
         "aws",
         (
@@ -108,91 +126,190 @@ HOSTS: tuple[Host, ...] = (
             "bedrock/us.amazon.nova-lite-v1:0",
             "bedrock/anthropic.claude-3-haiku-20240307-v1:0",
             "bedrock/meta.llama3-70b-instruct-v1:0",
-            "bedrock/mistral.mixtral-8x7b-instruct-v0:1",
         ),
-        "Recognised by the vendor prefix, so the `bedrock/` prefix is optional. "
-        "Uses your AWS credentials; no vendor API key needed.",
+        "Uses your existing AWS credentials, so there is no vendor key at all. "
+        "Bedrock ids are recognised by their vendor prefix, so the `bedrock/` "
+        "prefix is optional.",
     ),
     Host(
-        "OpenAI",
-        "openai",
-        "https://api.openai.com/v1",
-        None,
-        ("gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "o3-mini", "text-embedding-3-small"),
-        "Recognised by family prefix, so these route to OpenAI whatever the default is.",
-    ),
-    Host(
-        "Groq",
-        "openai",
-        "https://api.groq.com/openai/v1",
-        None,
-        ("llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"),
-        "OpenAI-compatible. Very fast; useful free tier.",
-    ),
-    Host(
-        "Google Gemini",
-        "openai",
-        "https://generativelanguage.googleapis.com/v1beta/openai/",
-        None,
-        ("gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"),
-        "Google ships an OpenAI-compatible endpoint, so no separate adapter is needed.",
-    ),
-    Host(
-        "Anthropic",
-        "openai",
-        "https://api.anthropic.com/v1",
-        None,
-        ("claude-sonnet-4-5", "claude-haiku-4-5", "claude-3-5-haiku-latest"),
-        "Anthropic ships an OpenAI-compatible endpoint. Claude is also reachable "
-        "through Bedrock without a separate key.",
-    ),
-    Host(
-        "Ollama, local",
+        "ollama",
+        "Ollama, on this machine",
         "openai",
         "http://localhost:11434/v1",
         None,
+        None,
         ("llama3.2", "qwen2.5-coder:7b", "mistral", "phi4", "gemma3"),
-        "Ollama tags use `name:tag`. Any API key value works; it is ignored.",
+        "Runs locally and costs nothing. Tags use `name:tag`. Any API key value "
+        "works because Ollama ignores it.",
     ),
     Host(
+        "local",
+        "vLLM, LM Studio, llama.cpp",
+        "openai",
+        "http://localhost:8000/v1",
+        None,
+        None,
+        ("whatever you served",),
+        "Any OpenAI-compatible server you run yourself.",
+    ),
+    # ------------------------------------------------------- key in the usual env var
+    Host(
+        "openai",
+        "OpenAI",
+        "openai",
+        "https://api.openai.com/v1",
+        "OPENAI_API_KEY",
+        None,
+        ("gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "o3-mini", "text-embedding-3-small"),
+        "Recognised by family prefix, so these route here whatever the default is.",
+    ),
+    Host(
+        "anthropic",
+        "Anthropic, Claude",
+        "openai",
+        "https://api.anthropic.com/v1",
+        "ANTHROPIC_API_KEY",
+        None,
+        ("claude-sonnet-4-5", "claude-haiku-4-5", "claude-3-5-haiku-latest"),
+        "Anthropic ships an OpenAI-compatible endpoint. Claude is also reachable "
+        "through Bedrock with no vendor key.",
+    ),
+    Host(
+        "gemini",
+        "Google Gemini",
+        "openai",
+        "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "GEMINI_API_KEY",
+        None,
+        ("gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"),
+        "Also reads GOOGLE_API_KEY. Generous free tier.",
+    ),
+    Host(
+        "xai",
+        "xAI, Grok",
+        "openai",
+        "https://api.x.ai/v1",
+        "XAI_API_KEY",
+        None,
+        ("grok-4", "grok-3-mini", "grok-2-1212"),
+        "",
+    ),
+    Host(
+        "groq",
+        "Groq",
+        "openai",
+        "https://api.groq.com/openai/v1",
+        "GROQ_API_KEY",
+        None,
+        ("llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"),
+        "Very fast, useful free tier.",
+    ),
+    Host(
+        "deepseek",
+        "DeepSeek",
+        "openai",
+        "https://api.deepseek.com/v1",
+        "DEEPSEEK_API_KEY",
+        None,
+        ("deepseek-chat", "deepseek-reasoner"),
+        "",
+    ),
+    Host(
+        "mistral",
+        "Mistral AI",
+        "openai",
+        "https://api.mistral.ai/v1",
+        "MISTRAL_API_KEY",
+        None,
+        ("mistral-large-latest", "mistral-small-latest", "codestral-latest"),
+        "",
+    ),
+    Host(
+        "openrouter",
         "OpenRouter",
         "openai",
         "https://openrouter.ai/api/v1",
+        "OPENROUTER_API_KEY",
         None,
         (
             "anthropic/claude-3.5-sonnet",
             "meta-llama/llama-3.1-8b-instruct",
             "google/gemini-2.0-flash-exp",
         ),
-        "Model ids contain a slash. The proxy forwards them whole; only its own "
-        "`bedrock/`, `openai/` and `fake/` prefixes are stripped.",
+        "One key reaches hundreds of models. Ids contain a slash and are forwarded whole.",
     ),
     Host(
+        "together",
         "Together",
         "openai",
         "https://api.together.xyz/v1",
+        "TOGETHER_API_KEY",
         None,
         ("meta-llama/Llama-3.3-70B-Instruct-Turbo", "mistralai/Mixtral-8x7B-Instruct-v0.1"),
-        "Also uses slash-containing ids, forwarded whole.",
+        "Ids contain a slash and are forwarded whole.",
     ),
     Host(
-        "vLLM or LM Studio, self-hosted",
+        "fireworks",
+        "Fireworks",
         "openai",
-        "http://localhost:8000/v1",
+        "https://api.fireworks.ai/inference/v1",
+        "FIREWORKS_API_KEY",
         None,
-        ("whatever you served", "my-finetuned-model"),
-        "Any OpenAI-compatible server. Unknown names fall through to here, which "
-        "is why the default provider is the OpenAI-compatible adapter.",
+        ("accounts/fireworks/models/llama-v3p3-70b-instruct",),
+        "",
     ),
     Host(
+        "cerebras",
+        "Cerebras",
+        "openai",
+        "https://api.cerebras.ai/v1",
+        "CEREBRAS_API_KEY",
+        None,
+        ("llama3.1-8b", "llama-3.3-70b"),
+        "",
+    ),
+    Host(
+        "perplexity",
+        "Perplexity",
+        "openai",
+        "https://api.perplexity.ai",
+        "PERPLEXITY_API_KEY",
+        None,
+        ("sonar", "sonar-pro"),
+        "Answers are search-grounded, so cache them with a short TTL.",
+    ),
+    Host(
+        "moonshot",
+        "Moonshot, Kimi",
+        "openai",
+        "https://api.moonshot.ai/v1",
+        "MOONSHOT_API_KEY",
+        None,
+        ("kimi-k2-0905-preview", "moonshot-v1-8k"),
+        "",
+    ),
+    # ---------------------------------------------------------------- built in
+    Host(
+        "fake",
         "Built-in test double",
         "fake",
         None,
         None,
+        None,
         ("fake/echo",),
-        "Deterministic, free, offline. Used by the tests and the reproducible benchmark.",
+        "Deterministic, free, offline. Used by the tests and the reproducible "
+        "benchmark, and by the quick start so you can see it work before "
+        "spending anything.",
     ),
 )
+
+#: Extra environment variables worth checking for the same host.
+ALSO_READS: dict[str, tuple[str, ...]] = {
+    "gemini": ("GOOGLE_API_KEY", "GOOGLE_GENAI_API_KEY"),
+    "openai": ("OPENAI_KEY",),
+}
+
+HOSTS_BY_KEY: dict[str, Host] = {h.key: h for h in HOSTS}
 
 
 def looks_like_bedrock(model: str) -> bool:
