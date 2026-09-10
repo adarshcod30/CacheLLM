@@ -67,6 +67,7 @@ async def stats(request: Request) -> dict[str, Any]:
         }
     data = await state.cache.stats()
     data["cache_available"] = True
+    data["backend"] = state.backend
     data["caching_enabled"] = state.settings.enabled
     data["shadow_mode"] = state.settings.shadow_mode
     data["in_flight"] = state.singleflight.in_flight
@@ -83,6 +84,11 @@ async def config(request: Request) -> dict[str, Any]:
     return {
         "enabled": s.enabled,
         "shadow_mode": s.shadow_mode,
+        "backend": {
+            "requested": s.backend,
+            "active": state.backend,
+            "max_entries": s.memory_max_entries if state.backend == "memory" else None,
+        },
         "embedding": {
             "backend": s.embedding_backend,
             "model": s.embedding_model,

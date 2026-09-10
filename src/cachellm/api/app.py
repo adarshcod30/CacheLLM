@@ -54,9 +54,17 @@ def create_app(settings: Settings | None = None, state: AppState | None = None) 
             "cachellm_started",
             version=__version__,
             cache_available=current.cache_available,
+            backend=current.backend,
             embedding_model=current.embedder.name,
             default_provider=current.settings.default_provider,
         )
+        if current.backend == "memory":
+            log.info(
+                "memory_backend_active",
+                hint="the cache lives in this process: not shared with other workers, "
+                "and lost on restart unless CACHELLM_MEMORY_SNAPSHOT_PATH is set. "
+                "Point CACHELLM_REDIS_URL at a Redis 8 for shared, durable caching.",
+            )
         try:
             yield
         finally:
@@ -110,6 +118,7 @@ def create_app(settings: Settings | None = None, state: AppState | None = None) 
         body = {
             "status": "ready" if ready else "degraded",
             "cache_available": current.cache_available,
+            "backend": current.backend,
             "degraded_reason": current.degraded_reason or None,
             "embedding_model": current.embedder.name,
         }

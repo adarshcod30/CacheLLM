@@ -182,17 +182,18 @@ async def test_empty_responses_are_not_stored(state) -> None:
 
 
 async def test_ttl_is_applied_from_the_category(state) -> None:
-    await seed(state, "what is the weather today in jaipur")  # volatile
-    keys = await state.vectors.scan_keys()
-    ttl = await state.redis.ttl(keys[0])
+    entry_id = await seed(state, "what is the weather today in jaipur")  # volatile
+    ttl = await state.vectors.ttl(entry_id)
     assert 0 < ttl <= state.settings.ttl_volatile
 
 
 async def test_factual_entries_live_longer_than_volatile_ones(state) -> None:
-    await seed(state, "what is the capital of france")
-    keys = await state.vectors.scan_keys()
-    ttl = await state.redis.ttl(keys[0])
-    assert ttl > state.settings.ttl_volatile
+    entry_id = await seed(state, "what is the capital of france")
+    assert await state.vectors.ttl(entry_id) > state.settings.ttl_volatile
+
+
+async def test_ttl_reports_missing_entries_the_same_way_on_both_backends(state) -> None:
+    assert await state.vectors.ttl("no-such-entry") == -2
 
 
 async def test_hit_counter_increments(state) -> None:

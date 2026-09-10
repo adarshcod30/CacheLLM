@@ -77,6 +77,21 @@ class Settings(BaseSettings):
     api_keys: str = ""
     require_auth_for_admin: bool = True
 
+    # ----------------------------------------------------------------- storage
+    #: Where the cache lives. "memory" needs nothing installed and searches a
+    #: numpy matrix in this process; "redis" shares one cache across workers and
+    #: survives restarts; "auto" uses Redis when it is reachable and quietly
+    #: falls back to memory when it is not, which is what makes
+    #: `pip install cachellm-proxy && cachellm serve` work on a bare machine.
+    #:
+    #: Memory is not a lesser option below roughly 100k entries: scanning 20,000
+    #: cached prompts takes 0.44 ms, where a Redis round trip alone costs 2-3 ms.
+    backend: Literal["auto", "memory", "redis"] = "auto"
+    #: Cap on entries held in memory. 50k of 384-dim vectors is about 73 MB.
+    memory_max_entries: int = 50_000
+    #: Optional file to persist the in-memory cache across restarts.
+    memory_snapshot_path: str = ""
+
     # ------------------------------------------------------------------- redis
     redis_url: str = "redis://localhost:6379/0"
     index_name: str = "cachellm_idx"

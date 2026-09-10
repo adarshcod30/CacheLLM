@@ -126,6 +126,14 @@ class VectorStore:
     async def delete(self, entry_id: str) -> int:
         return int(await self._redis.delete(self.key(entry_id)))
 
+    async def ttl(self, entry_id: str) -> int:
+        """Seconds until this entry expires.
+
+        Redis semantics, matched by the in-memory store: -1 means it is stored
+        with no expiry, -2 means there is nothing there.
+        """
+        return int(await self._redis.ttl(self.key(entry_id)))
+
     # ------------------------------------------------------------------ queries
     async def search(
         self, namespace: str, vector: np.ndarray, k: int

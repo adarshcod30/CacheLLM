@@ -25,6 +25,7 @@ TEST_REDIS_URL = os.getenv("CACHELLM_TEST_REDIS_URL", "redis://localhost:6379/0"
 def make_settings(**overrides) -> Settings:
     token = uuid.uuid4().hex[:8]
     base = {
+        "backend": "memory",
         "_env_file": None,
         "embedding_backend": "hash",
         "embedding_dim": 384,
@@ -84,9 +85,22 @@ requires_redis = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(params=["memory", "redis"])
+def backend(request) -> str:
+    """Run the storage-facing tests against both backends.
+
+    The point of the in-memory store is that it is not a lesser mode: the same
+    suite has to pass against it and against Redis, or "no server required" is
+    a claim rather than a fact.
+    """
+    if request.param == "redis" and not redis_available(TEST_REDIS_URL):
+        pytest.skip(f"no Redis at {TEST_REDIS_URL}")
+    return str(request.param)
+
+
 @pytest.fixture
-def settings() -> Iterator[Settings]:
-    cfg = make_settings()
+def settings(backend: str) -> Iterator[Settings]:
+    cfg = make_settings(backend=backend)
     yield cfg
     purge(cfg)
 
@@ -98,10 +112,10 @@ def fake_provider() -> FakeProvider:
 
 # --------------------------------------------------------------------- async
 @pytest_asyncio.fixture
-async def state(fake_provider: FakeProvider) -> AsyncIterator:
+async def state(backend: str, fake_provider: FakeProvider) -> AsyncIterator:
     """Application state built on the running test loop, for direct-call tests."""
     reset_metrics()
-    cfg = make_settings()
+    cfg = make_settings(backend=backend)
     registry = ProviderRegistry(cfg, providers={"fake": fake_provider})
     app_state = await build_state(cfg, providers=registry)
     try:
@@ -120,6 +134,7 @@ async def asgi():
 
     async def factory(**overrides):
         reset_metrics()
+        overrides.setdefault("backend", "memory")
         cfg = make_settings(**overrides)
         app_state = await build_state(cfg, providers=ProviderRegistry(cfg))
         app = create_app(cfg, state=app_state)
@@ -140,12 +155,13 @@ async def asgi():
 
 # ---------------------------------------------------------------------- sync
 @pytest.fixture
-def client_factory() -> Iterator:
+def client_factory(backend: str) -> Iterator:
     """Factory for TestClients. The app builds its own state inside its own loop."""
     created: list[tuple[TestClient, Settings]] = []
 
     def factory(**overrides) -> TestClient:
         reset_metrics()
+        overrides.setdefault("backend", backend)
         cfg = make_settings(**overrides)
         test_client = TestClient(create_app(cfg))
         test_client.__enter__()

@@ -3,7 +3,7 @@
 Two small scripts and a recording tape, used to produce the GIF in the README.
 
 ```bash
-# terminal 1: a proxy with a cold cache
+# terminal 1: a proxy with a cold cache (no Redis needed; it uses memory)
 CACHELLM_DEFAULT_PROVIDER=bedrock AWS_REGION=us-east-1 uv run cachellm serve
 curl -X POST localhost:8080/admin/invalidate -H 'content-type: application/json' -d '{"all":true}'
 curl -X POST localhost:8080/admin/reset-stats

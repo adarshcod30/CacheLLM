@@ -63,6 +63,7 @@ The same benchmark runs without any cloud credentials against the built-in fake 
 | Feature | What it does | Why it exists |
 | --- | --- | --- |
 | **Drop-in OpenAI API** | Same request and response shape, streaming included, verified against the official `openai` Python SDK in CI | Adoption has to cost one line, or nobody adopts it |
+| **Runs with nothing installed** | Defaults to an in-process numpy store; uses Redis automatically when it can reach one | A cache you have to provision a server for does not get tried. Redis takes over when you actually need shared, durable state |
 | **Two-tier cache** | Exact-match tier answers literal repeats in about a millisecond without embedding; semantic tier handles rewording | 82% of hits came from the exact tier: free, fast and impossible to get semantically wrong |
 | **Per-model threshold calibration** | Ships measured safe thresholds for six embedding models and picks the right one automatically | Measured safe thresholds span 0.89 to 0.98. A threshold copied between models is a guess |
 | **Cacheability policy** | Classifies every prompt and decides cacheable, category, TTL | Creative writing, live data and personal questions must not be cached like a fact |
@@ -86,7 +87,8 @@ The same benchmark runs without any cloud credentials against the built-in fake 
 | API | FastAPI + Uvicorn | Async, native streaming, OpenAPI docs for free |
 | Validation and config | Pydantic v2, pydantic-settings | Typed request shapes and typed configuration from the environment |
 | Embeddings | fastembed, `all-MiniLM-L6-v2` (ONNX, CPU) | In-process and about 6 ms. A hosted embedding API would put 100 ms in front of every cache hit and defeat the point |
-| Vector store | Redis 8 + RedisVL, HNSW over cosine | One process is the exact-match store, the vector index and the stampede lock. Sub-millisecond, and TTL expiry removes entries from the index for free |
+| Vector store, default | numpy matrix in the proxy's own memory | Nothing to install. Scanning 20,000 cached prompts takes 0.85 ms, where a Redis round trip alone costs 2 to 3 ms, so below roughly 100k entries this is not a compromise, it is faster |
+| Vector store, at scale | Redis 8 + RedisVL, HNSW over cosine | One process is the exact-match store, the vector index and the stampede lock. Shared across workers, survives restarts, and an approximate index starts paying above ~100k entries |
 | Providers | AWS Bedrock (Converse), any OpenAI-compatible endpoint, deterministic fake | Converse reaches Nova, Claude, Llama and Mistral with one request shape and no extra vendor keys |
 | Metrics | prometheus-client, Prometheus, Grafana | Dashboard ships provisioned, so a reviewer sees data on first boot |
 | Tracing | OpenTelemetry, optional, GenAI semantic conventions | Instrument once, export to Langfuse, Tempo or Jaeger |
@@ -222,32 +224,23 @@ MiniLM gives four times the safe recall of bge-small at a third of the download 
 
 ## Quick start
 
-You need Python 3.11 or newer and a Redis 8 instance. Redis 8 is required because the vector index needs the query engine, and it must be database 0 because Redis Search only indexes that one.
+Python 3.11 or newer, and nothing else.
 
 ```bash
 pip install cachellm-proxy
+CACHELLM_DEFAULT_PROVIDER=fake CACHELLM_FAKE_LATENCY_MS=600 cachellm serve
 ```
+
+That is the whole install. No Redis, no Docker, no API key. The cache runs in the proxy's own memory and the built-in fake provider stands in for a model, so you can watch it work before spending anything.
 
 The distribution is `cachellm-proxy` because PyPI blocks `cachellm` as too close to an existing `cachelm`. The import name and the CLI are both still `cachellm`.
 
-Or from source, which is what you want if you plan to change anything:
+From source, if you plan to change anything:
 
 ```bash
 git clone https://github.com/adarshcod30/CacheLLM.git
 cd CacheLLM
-uv sync
-```
-
-Start Redis if you do not have one running:
-
-```bash
-docker run -d --name redis -p 6379:6379 redis:8-alpine
-```
-
-Run the proxy. With no configuration it uses the built-in fake provider, so you can see it working before wiring up a real model or spending anything:
-
-```bash
-CACHELLM_DEFAULT_PROVIDER=fake CACHELLM_FAKE_LATENCY_MS=600 uv run cachellm serve
+uv sync && uv run cachellm serve
 ```
 
 In another terminal, ask the same thing twice and watch the second one come back instantly:
@@ -383,7 +376,10 @@ Every setting is an environment variable prefixed `CACHELLM_`, or a line in `.en
 
 | Variable | Default | Notes |
 | --- | --- | --- |
+| `CACHELLM_BACKEND` | `auto` | `memory` needs nothing, `redis` shares one cache across workers, `auto` uses Redis when reachable and memory when not |
 | `CACHELLM_REDIS_URL` | `redis://localhost:6379/0` | Must be database 0. Redis Search cannot index any other |
+| `CACHELLM_MEMORY_MAX_ENTRIES` | `50000` | Cap for the in-memory store. 50k of 384-dim vectors is about 73 MB |
+| `CACHELLM_MEMORY_SNAPSHOT_PATH` | unset | Persist the in-memory cache to this file so a restart does not start cold |
 | `CACHELLM_API_KEYS` | empty | Comma-separated client keys. Empty disables auth, which is local development only |
 | `CACHELLM_EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Changing this changes the safe threshold. See the calibration table |
 | `CACHELLM_THRESHOLD_*` | `0` | Zero means use the calibrated value for your model |

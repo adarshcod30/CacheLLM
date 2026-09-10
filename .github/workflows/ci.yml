@@ -149,6 +149,53 @@ jobs:
             results/
             proxy.log
 
+  no-server:
+    name: Runs with nothing installed
+    # Deliberately has no Redis service. This job is the promise in the README:
+    # pip install, start it, and the cache works with no server to provision.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Start with no Redis anywhere
+        env:
+          CACHELLM_DEFAULT_PROVIDER: fake
+          CACHELLM_FAKE_LATENCY_MS: "50"
+          CACHELLM_EMBEDDING_BACKEND: fastembed
+        run: |
+          nohup uv run cachellm serve --port 8081 > proxy.log 2>&1 &
+          echo $! > proxy.pid
+          for _ in $(seq 1 60); do
+            curl -sf http://127.0.0.1:8081/healthz && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:8081/readyz | tee /dev/stderr | grep -q '"backend":"memory"'
+      - name: The cache must actually cache
+        run: |
+          uv run python -m bench.replay --base-url http://127.0.0.1:8081 \
+            --requests 300 --concurrency 8 --reset --out-dir results
+          uv run python - <<'PY'
+          import json
+          r = json.load(open("results/load_test.json"))
+          hit_rate = r["outcomes"]["hit_rate"]
+          semantic = r["outcomes"]["semantic_hits"]
+          false_hits = r["by_request_kind"].get("unseen", {}).get("HIT", 0)
+          print(f"memory backend: hit rate {hit_rate:.1%}, semantic {semantic}, "
+                f"false hits {false_hits}")
+          assert r["run"]["errors"] == 0
+          assert hit_rate > 0.5, f"hit rate collapsed to {hit_rate}"
+          assert semantic > 0, "semantic tier served nothing"
+          assert false_hits == 0, f"{false_hits} false positives"
+          PY
+      - name: Stop the proxy
+        if: always()
+        run: |
+          [ -f proxy.pid ] && kill "$(cat proxy.pid)" 2>/dev/null || true
+          tail -20 proxy.log || true
+
   docker:
     runs-on: ubuntu-latest
     steps:
