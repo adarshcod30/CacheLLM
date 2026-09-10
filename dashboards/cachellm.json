@@ -310,7 +310,13 @@
         "defaults": {
           "unit": "s",
           "custom": {
-            "axisScaleType": "log"
+            "scaleDistribution": {
+              "type": "log",
+              "log": 10
+            },
+            "fillOpacity": 8,
+            "lineWidth": 2,
+            "showPoints": "never"
           },
           "color": {
             "mode": "palette-classic"
@@ -350,6 +356,11 @@
           "unit": "reqps",
           "color": {
             "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2,
+            "showPoints": "never"
           }
         },
         "overrides": []
@@ -407,6 +418,11 @@
           "unit": "short",
           "color": {
             "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2,
+            "showPoints": "never"
           }
         },
         "overrides": []
@@ -443,6 +459,11 @@
           "unit": "reqps",
           "color": {
             "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2,
+            "showPoints": "never"
           }
         },
         "overrides": []
@@ -497,6 +518,11 @@
           "unit": "reqps",
           "color": {
             "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2,
+            "showPoints": "never"
           }
         },
         "overrides": []
@@ -545,6 +571,11 @@
           "unit": "short",
           "color": {
             "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2,
+            "showPoints": "never"
           }
         },
         "overrides": []
@@ -590,6 +621,11 @@
           "unit": "s",
           "color": {
             "mode": "palette-classic"
+          },
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2,
+            "showPoints": "never"
           }
         },
         "overrides": []

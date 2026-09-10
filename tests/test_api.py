@@ -167,6 +167,30 @@ def test_metrics_expose_cache_outcomes(client) -> None:
     assert "cachellm_request_duration_seconds" in text
 
 
+def test_metrics_are_scrapable_by_prometheus(client) -> None:
+    """The content type must match the body.
+
+    `generate_latest` emits the Prometheus text format. Advertising the
+    OpenMetrics type alongside it makes a real Prometheus reject the scrape
+    with "data does not end with # EOF", and nothing short of a live scrape
+    notices, so it is pinned here.
+    """
+    post(client)
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    content_type = response.headers["content-type"]
+    body = response.text
+    if "openmetrics" in content_type:
+        assert body.rstrip().endswith("# EOF"), "OpenMetrics body must end with # EOF"
+    else:
+        assert content_type.startswith("text/plain")
+        assert not body.rstrip().endswith("# EOF")
+    # every metric line must be name{labels} value, which is what a scraper parses
+    for line in body.splitlines():
+        if line and not line.startswith("#"):
+            assert len(line.rsplit(" ", 1)) == 2, f"unparseable metric line: {line!r}"
+
+
 def test_admin_stats_reports_hit_rate(client) -> None:
     post(client)
     post(client)

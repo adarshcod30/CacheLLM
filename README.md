@@ -12,6 +12,10 @@ On a 2,000-request replay against **AWS Bedrock** it served **77% of traffic fro
 
 [Quick start](#quick-start) · [How it works](#how-it-works) · [Evaluation](docs/evaluation.md) · [API reference](#api-reference) · [Deployment](#deployment-and-infrastructure)
 
+![CacheLLM serving repeated and reworded questions from cache](docs/images/demo.gif)
+
+*Real requests against Amazon Nova Micro on AWS Bedrock. A new question takes 1.6 seconds. The same question repeated takes 2.5 ms. A reworded version takes 2.9 ms at 0.99 similarity. A genuinely different question still misses, and anything with personal data in it is never stored.*
+
 `llm` `semantic-cache` `openai-compatible` `fastapi` `redis` `vector-search` `aws-bedrock` `llmops` `prometheus` `grafana` `opentelemetry` `cost-optimization`
 
 > **Status.** Working software with a real test suite and reproducible numbers. It runs locally or in Docker. There is no hosted demo URL: this is infrastructure you run in front of your own LLM calls, so the [quick start](#quick-start) has it serving traffic in about two minutes.
@@ -392,7 +396,12 @@ Every setting is an environment variable prefixed `CACHELLM_`, or a line in `.en
 
 **CI/CD.** GitHub Actions runs lint, mypy, and the test suite against a real Redis 8 service container across Python 3.11, 3.12 and 3.13. A separate job boots the proxy, replays 300 requests and fails the build if hit rate collapses or if any genuinely-new question gets a cache hit. A fourth job builds the Docker image and boots it against Redis to check it comes up healthy.
 
-**Monitoring.** Prometheus scrapes `/metrics` every five seconds. The shipped Grafana dashboard has eleven panels: cumulative money saved, cost reduction, hit rate, cache size, latency by outcome on a log scale, request rate by outcome, similarity distributions for hits against misses, hits by category, near misses and stampedes, tokens spent against avoided, and embedding time. Set `CACHELLM_TRACING_ENABLED` with an OTLP endpoint to send traces to Langfuse, Tempo or Jaeger.
+**Monitoring.** Prometheus scrapes `/metrics` every five seconds.
+
+![The shipped Grafana dashboard, populated by real Bedrock traffic](docs/images/dashboard.png)
+
+*The dashboard that ships with the repo, filled by 2,500 real requests through Bedrock. Latency is on a log axis because hits and misses are three orders of magnitude apart, which a linear axis would flatten into a single line at zero.*
+ The shipped Grafana dashboard has eleven panels: cumulative money saved, cost reduction, hit rate, cache size, latency by outcome on a log scale, request rate by outcome, similarity distributions for hits against misses, hits by category, near misses and stampedes, tokens spent against avoided, and embedding time. Set `CACHELLM_TRACING_ENABLED` with an OTLP endpoint to send traces to Langfuse, Tempo or Jaeger.
 
 **Rolling it out safely.** Turn on shadow mode, leave it for a week, read `/admin/near-misses` and `/admin/stats`, run `/admin/threshold-sweep` on pairs drawn from your own logs, then switch shadow mode off.
 

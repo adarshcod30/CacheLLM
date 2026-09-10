@@ -13,8 +13,14 @@ label.
 
 from __future__ import annotations
 
-from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, generate_latest
-from prometheus_client.openmetrics.exposition import CONTENT_TYPE_LATEST
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 
 # Buckets tuned for this workload: cache hits land in single-digit milliseconds,
 # provider calls in hundreds of milliseconds to seconds.
@@ -114,6 +120,14 @@ class Metrics:
             self.cost.labels(kind=kind, model=model).inc(usd)
 
     def render(self) -> tuple[bytes, str]:
+        """Serialise for a Prometheus scrape.
+
+        The content type has to match the body. `generate_latest` emits the
+        Prometheus text format; advertising OpenMetrics alongside it makes
+        Prometheus reject the scrape with "data does not end with # EOF",
+        because OpenMetrics requires that terminator and the text format has
+        no such thing. Nothing but a real scrape catches this.
+        """
         return generate_latest(self.registry), CONTENT_TYPE_LATEST
 
 
