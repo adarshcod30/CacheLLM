@@ -23,7 +23,7 @@ Both scripts honour two environment variables:
 | Variable | Default |
 | --- | --- |
 | `CACHELLM_URL` | `http://127.0.0.1:8080` |
-| `CACHELLM_MODEL` | `bedrock/us.amazon.nova-micro-v1:0` |
+| `CACHELLM_MODEL` | `fake/echo` |
 
 To run against the built-in fake provider instead, so it costs nothing and needs
 no cloud account:

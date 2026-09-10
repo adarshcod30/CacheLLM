@@ -18,6 +18,14 @@ from pydantic import BaseModel, Field
 from cachellm.api.auth import verify
 from cachellm.api.deps import get_state
 from cachellm.errors import CacheLLMError
+from cachellm.providers.catalog import (
+    BEDROCK_VENDORS,
+    HOSTS,
+    OPENAI_FAMILIES,
+    ROUTING_PREFIXES,
+    looks_like_bedrock,
+    looks_like_openai,
+)
 
 log = structlog.get_logger(__name__)
 router = APIRouter()
@@ -127,6 +135,62 @@ async def config(request: Request) -> dict[str, Any]:
         },
         "default_provider": s.default_provider,
         "auth_enabled": s.auth_enabled,
+    }
+
+
+@router.get("/providers")
+async def providers(request: Request) -> dict[str, Any]:
+    """Where model names go, and what to type for each host.
+
+    Answers the question the router answers, but for a human: which names route
+    where, what base URL each hosting provider needs, and which need a pip extra.
+    """
+    state = get_state(request)
+    if state.settings.require_auth_for_admin:
+        verify(request, state.settings.client_keys)
+    return {
+        "default_provider": state.settings.default_provider,
+        "routing": {
+            "1_explicit_prefix": list(ROUTING_PREFIXES),
+            "2_bedrock_vendor_prefixes": list(BEDROCK_VENDORS),
+            "2_openai_families": list(OPENAI_FAMILIES),
+            "3_everything_else": state.settings.default_provider,
+        },
+        "hosts": [
+            {
+                "name": h.name,
+                "adapter": h.provider,
+                "base_url": h.base_url,
+                "pip_extra": h.extra,
+                "example_models": list(h.examples),
+                "note": h.note,
+            }
+            for h in HOSTS
+        ],
+    }
+
+
+@router.get("/route/{model:path}")
+async def route(request: Request, model: str) -> dict[str, Any]:
+    """Explain where one model name would go, and why."""
+    state = get_state(request)
+    if state.settings.require_auth_for_admin:
+        verify(request, state.settings.client_keys)
+    provider, name = state.providers.resolve(model)
+    head, sep, _ = model.partition("/")
+    if sep and head.lower() in ROUTING_PREFIXES:
+        why = "explicit routing prefix"
+    elif looks_like_bedrock(model):
+        why = "Bedrock vendor naming convention"
+    elif looks_like_openai(model):
+        why = "OpenAI model family"
+    else:
+        why = f"no vendor could be identified, so the default ({name}) applies"
+    return {
+        "model": model,
+        "provider": name,
+        "forwarded_as": provider.resolve_model(model),
+        "reason": why,
     }
 
 

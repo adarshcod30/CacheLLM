@@ -162,7 +162,12 @@ class Settings(BaseSettings):
     strip_filler_words: bool = False
 
     # --------------------------------------------------------------- providers
-    default_provider: Literal["bedrock", "openai", "fake"] = "bedrock"
+    #: Where a model name goes when its vendor cannot be identified. The
+    #: OpenAI-compatible adapter is the right fallback because it is always
+    #: installed and it serves Groq, Ollama, Together, OpenRouter and vLLM,
+    #: which is where unattributable names like `llama3.2` actually live.
+    #: Bedrock model ids are recognised by their vendor prefix regardless.
+    default_provider: Literal["bedrock", "openai", "fake"] = "openai"
     aws_region: str = "us-east-1"
     aws_profile: str = ""
     #: Simulated upstream latency for the `fake` provider, so a reproducible

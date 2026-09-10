@@ -299,28 +299,53 @@ make tune && make compare-models && make bench
 
 ### Using a real provider
 
-AWS Bedrock needs no extra vendor keys and reaches Nova, Claude, Llama and Mistral through one API:
+One environment variable per host. Everything except Bedrock speaks the OpenAI protocol, so a single adapter covers all of it and needs no extra.
+
+| Host | `CACHELLM_OPENAI_BASE_URL` | Example model |
+| --- | --- | --- |
+| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
+| Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
+| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai/` | `gemini-2.5-flash` |
+| Anthropic | `https://api.anthropic.com/v1` | `claude-haiku-4-5` |
+| OpenRouter | `https://openrouter.ai/api/v1` | `anthropic/claude-3.5-sonnet` |
+| Together | `https://api.together.xyz/v1` | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
+| Ollama, local | `http://localhost:11434/v1` | `llama3.2` |
+| vLLM or LM Studio | `http://localhost:8000/v1` | whatever you served |
 
 ```bash
-CACHELLM_DEFAULT_PROVIDER=bedrock AWS_REGION=us-east-1 uv run cachellm serve
+CACHELLM_OPENAI_BASE_URL=https://api.groq.com/openai/v1 \
+CACHELLM_OPENAI_API_KEY=gsk_your_key \
+cachellm serve
 ```
 
-If your credentials come from `aws login` rather than static keys or an SSO profile, install the CRT extra once, because that credential provider needs it:
+**AWS Bedrock** is the one exception, because it does not speak the OpenAI protocol. It needs the `aws` extra, and then uses your existing AWS credentials with no vendor API key at all:
 
 ```bash
-uv sync --extra aws
+pip install "cachellm-proxy[aws]"
+CACHELLM_DEFAULT_PROVIDER=bedrock AWS_REGION=us-east-1 cachellm serve
 ```
-
-The proxy detects that case and says so in the error rather than passing along boto's version of the message.
 
 ```bash
 curl -s http://localhost:8080/v1/chat/completions -H 'Content-Type: application/json' -d '{"model":"bedrock/us.amazon.nova-micro-v1:0","temperature":0,"messages":[{"role":"user","content":"What is Redis used for?"}]}'
 ```
 
-Any OpenAI-compatible endpoint works too, which covers OpenAI, Groq, Together, OpenRouter and a local vLLM:
+If your credentials come from `aws login` rather than static keys or an SSO profile, that provider needs the CRT extra, which the `aws` extra already includes. The proxy detects that case and says so in the error rather than passing along boto's version of the message.
+
+### How a model name gets routed
+
+Three rules, in order. You never configure a model list.
+
+1. **An explicit prefix** this proxy owns: `bedrock/…`, `openai/…`, `fake/…`.
+2. **A recognisable vendor convention.** Bedrock ids are always `vendor.model`, so `amazon.nova-lite-v1:0` and `us.anthropic.claude-3-haiku-20240307-v1:0` are identified with no prefix. OpenAI's own families (`gpt-`, `o1`, `o3`, `text-embedding-`) are identified the same way, whatever the default is.
+3. **Otherwise the configured default**, which is the OpenAI-compatible adapter. Names like `llama3.2`, `mixtral-8x7b-32768` and `qwen2.5-coder:7b` are served by Groq, Ollama, Together and OpenRouter alike, so the endpoint you configured is the only sensible answer.
+
+Model ids that legitimately contain a slash, which OpenRouter and Together both use, are forwarded whole. Only this proxy's own prefixes are stripped. Note that `anthropic.claude-…` with a dot is a Bedrock id while `anthropic/claude-…` with a slash is an OpenRouter id, and the router tells them apart.
+
+Ask it directly if you are unsure:
 
 ```bash
-CACHELLM_DEFAULT_PROVIDER=openai CACHELLM_OPENAI_BASE_URL=https://api.groq.com/openai/v1 CACHELLM_OPENAI_API_KEY=... uv run cachellm serve
+curl -s localhost:8080/admin/route/meta-llama/Llama-3.3-70B-Instruct-Turbo
+curl -s localhost:8080/admin/providers
 ```
 
 ## API reference
@@ -357,6 +382,8 @@ Clients can steer per request with `X-Cache-Control`:
 | --- | --- |
 | `GET /admin/stats` | Hit rate, tier split, money saved, latency percentiles, entry count |
 | `GET /admin/config` | Effective thresholds, TTLs and rules |
+| `GET /admin/providers` | Every host, its base URL, its pip extra, example model ids |
+| `GET /admin/route/{model}` | Where one model name would go, and why |
 | `POST /admin/invalidate` | Drop by `namespace`, by `model`, or `all` |
 | `GET /admin/near-misses` | Recent lookups that landed just below threshold |
 | `GET /admin/near-miss-histogram` | Cumulative view of what a lower threshold would buy |

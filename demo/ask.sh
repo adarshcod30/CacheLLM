@@ -5,7 +5,8 @@ set -uo pipefail
 
 PROMPT="${1:?usage: demo/ask.sh \"your question\"}"
 BASE="${CACHELLM_URL:-http://127.0.0.1:8080}"
-MODEL="${CACHELLM_MODEL:-bedrock/us.amazon.nova-micro-v1:0}"
+# Override with CACHELLM_MODEL. `fake/echo` needs no credentials at all.
+MODEL="${CACHELLM_MODEL:-fake/echo}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 HEADERS=$(mktemp); trap 'rm -f "$HEADERS"' EXIT

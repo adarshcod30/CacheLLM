@@ -17,36 +17,18 @@ from __future__ import annotations
 import structlog
 
 from cachellm.providers.base import Provider
-from cachellm.providers.bedrock import BedrockProvider, looks_like_bedrock_model
+from cachellm.providers.bedrock import BedrockProvider
+from cachellm.providers.catalog import (
+    ROUTING_PREFIXES,
+    looks_like_bedrock,
+    looks_like_openai,
+    suggested_models,
+)
 from cachellm.providers.fake import FakeProvider
 from cachellm.providers.openai_compat import OpenAICompatProvider
 from cachellm.settings import Settings
 
 log = structlog.get_logger(__name__)
-
-# Model families we can attribute to a vendor with confidence. A bare
-# "gpt-4o-mini" from a drop-in client means OpenAI, whatever the configured
-# default provider happens to be.
-OPENAI_MODEL_PREFIXES = (
-    "gpt-",
-    "o1",
-    "o3",
-    "o4",
-    "chatgpt-",
-    "text-embedding-",
-    "davinci",
-    "babbage",
-)
-
-# Shown by GET /v1/models so a client can discover what this proxy will route.
-SUGGESTED_MODELS = [
-    "bedrock/us.amazon.nova-micro-v1:0",
-    "bedrock/us.amazon.nova-lite-v1:0",
-    "bedrock/us.amazon.nova-pro-v1:0",
-    "bedrock/anthropic.claude-3-haiku-20240307-v1:0",
-    "openai/gpt-4o-mini",
-    "fake/echo",
-]
 
 
 class ProviderRegistry:
@@ -67,16 +49,25 @@ class ProviderRegistry:
         return self._providers[name]
 
     def provider_name_for(self, model: str) -> str:
+        """Three rules, in order.
+
+        1. An explicit prefix this proxy owns wins outright.
+        2. A recognisable vendor naming convention decides it: Bedrock ids are
+           `vendor.model`, OpenAI ids belong to a small set of families.
+        3. Otherwise the configured default, which is the OpenAI-compatible
+           adapter. Names like `llama3.2` or `mixtral-8x7b-32768` are served by
+           several hosts, so the endpoint the operator configured is the only
+           sensible answer.
+        """
         model = model.strip()
-        if "/" in model:
-            prefix = model.split("/", 1)[0].lower()
-            if prefix in ("bedrock", "openai", "fake"):
-                return prefix
+        head, sep, _ = model.partition("/")
+        if sep and head.lower() in ROUTING_PREFIXES:
+            return head.lower()
         if model.startswith("fake-"):
             return "fake"
-        if looks_like_bedrock_model(model):
+        if looks_like_bedrock(model):
             return "bedrock"
-        if model.lower().startswith(OPENAI_MODEL_PREFIXES):
+        if looks_like_openai(model):
             return "openai"
         return self._settings.default_provider
 
@@ -88,7 +79,7 @@ class ProviderRegistry:
         self._providers[name] = provider
 
     def models(self) -> list[str]:
-        return list(SUGGESTED_MODELS)
+        return suggested_models()
 
     async def close(self) -> None:
         for provider in self._providers.values():

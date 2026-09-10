@@ -143,6 +143,31 @@ def test_models_endpoint_lists_routable_models(client) -> None:
     assert any(m["id"].startswith("bedrock/") for m in body["data"])
 
 
+def test_admin_providers_lists_where_names_go(client) -> None:
+    body = client.get("/admin/providers").json()
+    assert body["default_provider"] in ("openai", "bedrock", "fake")
+    names = [h["name"] for h in body["hosts"]]
+    assert "AWS Bedrock" in names
+    assert any("Ollama" in n for n in names)
+    bedrock = next(h for h in body["hosts"] if h["name"] == "AWS Bedrock")
+    assert bedrock["pip_extra"] == "aws"
+    groq = next(h for h in body["hosts"] if h["name"] == "Groq")
+    assert groq["base_url"].startswith("https://")
+    assert groq["pip_extra"] is None
+
+
+def test_admin_route_explains_one_model_name(client) -> None:
+    d = client.get("/admin/route/amazon.nova-lite-v1:0").json()
+    assert d["provider"] == "bedrock"
+    assert d["forwarded_as"] == "amazon.nova-lite-v1:0"
+    assert "vendor" in d["reason"]
+
+    d = client.get("/admin/route/meta-llama/Llama-3.3-70B-Instruct-Turbo").json()
+    assert d["forwarded_as"] == "meta-llama/Llama-3.3-70B-Instruct-Turbo", (
+        "a vendor id containing a slash must reach the upstream intact"
+    )
+
+
 def test_invalid_body_returns_an_openai_error_envelope(client) -> None:
     response = client.post("/v1/chat/completions", json={"model": "fake/echo"})
     assert response.status_code == 400

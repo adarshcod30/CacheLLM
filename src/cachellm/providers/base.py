@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from cachellm.models import ChatCompletionRequest
+from cachellm.providers.catalog import strip_routing_prefix
 
 # Upstream "finished cleanly" markers, normalised to the OpenAI vocabulary.
 FINISH_REASON_MAP = {
@@ -67,8 +68,13 @@ class Provider(abc.ABC):
     def stream(self, request: ChatCompletionRequest) -> AsyncIterator[StreamEvent]: ...
 
     def resolve_model(self, model: str) -> str:
-        """Strip the routing prefix, if any, to get the upstream model id."""
-        return model.split("/", 1)[1] if "/" in model else model
+        """Get the upstream model id, keeping vendor ids intact.
+
+        Only this proxy's own prefixes are removed. A slash is part of the real
+        model name on OpenRouter and Together, so stripping it there would send
+        the upstream a name it does not recognise.
+        """
+        return strip_routing_prefix(model)
 
     async def close(self) -> None:  # pragma: no cover - default no-op
         return None
