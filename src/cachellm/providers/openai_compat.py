@@ -32,11 +32,18 @@ class OpenAICompatProvider(Provider):
     name = "openai"
 
     def __init__(
-        self, settings: Settings, base_url: str | None = None, api_key: str | None = None
+        self,
+        settings: Settings,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._settings = settings
         self._base_url = (base_url or settings.openai_base_url).rstrip("/")
         self._api_key = api_key if api_key is not None else settings.openai_api_key
+        # Injectable so tests exercise the real client construction, including
+        # the auth header, against a fake upstream rather than the network.
+        self._transport = transport
         self._client: httpx.AsyncClient | None = None
 
     def _http(self) -> httpx.AsyncClient:
@@ -48,6 +55,7 @@ class OpenAICompatProvider(Provider):
                 base_url=self._base_url,
                 headers=headers,
                 timeout=httpx.Timeout(self._settings.request_timeout, connect=10.0),
+                transport=self._transport,
             )
         return self._client
 
