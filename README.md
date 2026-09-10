@@ -4,6 +4,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-128%20passing-brightgreen)](tests/)
+[![PyPI](https://img.shields.io/pypi/v/cachellm-proxy)](https://pypi.org/project/cachellm-proxy/)
 [![Hit rate](https://img.shields.io/badge/hit%20rate-77%25%20on%20Bedrock-orange)](docs/evaluation.md)
 
 **A drop-in semantic cache for OpenAI-compatible LLM APIs. Change one base URL, and questions your model has already answered come back in milliseconds instead of seconds.**
@@ -224,8 +225,10 @@ MiniLM gives four times the safe recall of bge-small at a third of the download 
 You need Python 3.11 or newer and a Redis 8 instance. Redis 8 is required because the vector index needs the query engine, and it must be database 0 because Redis Search only indexes that one.
 
 ```bash
-pip install cachellm
+pip install cachellm-proxy
 ```
+
+The distribution is `cachellm-proxy` because PyPI blocks `cachellm` as too close to an existing `cachelm`. The import name and the CLI are both still `cachellm`.
 
 Or from source, which is what you want if you plan to change anything:
 

@@ -1,5 +1,5 @@
 [project]
-name = "cachellm"
+name = "cachellm-proxy"
 version = "0.1.0"
 description = "A drop-in semantic cache for OpenAI-compatible LLM APIs: match requests by meaning, serve repeats instantly, cut spend."
 readme = "README.md"
@@ -67,6 +67,12 @@ aws = [
 [build-system]
 requires = ["uv_build>=0.11.23,<0.12.0"]
 build-backend = "uv_build"
+
+# The distribution is `cachellm-proxy` because PyPI blocks `cachellm` as too
+# close to the existing `cachelm`. The import name stays `cachellm`, so the
+# build backend has to be told not to infer it from the project name.
+[tool.uv.build-backend]
+module-name = "cachellm"
 
 [dependency-groups]
 dev = [

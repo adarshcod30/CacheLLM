@@ -1,5 +1,10 @@
 # Publishing a release
 
+The distribution is published as **`cachellm-proxy`**. PyPI rejects `cachellm`
+as too similar to the existing `cachelm`, so the install name and the import
+name differ, which is ordinary: `pip install cachellm-proxy` then
+`import cachellm`.
+
 Releases go to PyPI through [Trusted Publishing][tp], so there is no API token
 in the repository, in GitHub secrets, or on anyone's laptop. GitHub proves the
 workflow's identity to PyPI directly over OIDC, and a leaked token cannot exist
@@ -18,7 +23,7 @@ You need a PyPI account, then one form.
 
    | Field | Value |
    | --- | --- |
-   | PyPI project name | `cachellm` |
+   | PyPI project name | `cachellm-proxy` |
    | Owner | `adarshcod30` |
    | Repository name | `CacheLLM` |
    | Workflow name | `release.yml` |
@@ -60,5 +65,5 @@ Test it against [TestPyPI](https://test.pypi.org) first if you want a dry run:
 
 ```bash
 uvx twine upload --repository testpypi dist/*
-pip install --index-url https://test.pypi.org/simple/ cachellm
+pip install --index-url https://test.pypi.org/simple/ cachellm-proxy
 ```
