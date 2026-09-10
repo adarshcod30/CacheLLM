@@ -1,0 +1,201 @@
+{
+  "name": "groq",
+  "model": "openai/gpt-oss-20b",
+  "detected": "Groq at https://api.groq.com/openai/v1 (GROQ_API_KEY is set)",
+  "run_at": "2026-09-10T23:13:01+00:00",
+  "passed": true,
+  "checks": [
+    {
+      "check": "the first ask is a miss answered by the model",
+      "passed": true
+    },
+    {
+      "check": "the same question again is an exact hit",
+      "passed": true
+    },
+    {
+      "check": "a reworded question is a meaning hit",
+      "passed": true
+    },
+    {
+      "check": "hits return the stored answer word for word",
+      "passed": true
+    },
+    {
+      "check": "a different country is not served Finland's answer",
+      "passed": true
+    },
+    {
+      "check": "a stream is answered live on a miss",
+      "passed": true
+    },
+    {
+      "check": "the same stream again is a hit",
+      "passed": true
+    },
+    {
+      "check": "the replayed stream matches the original exactly",
+      "passed": true
+    },
+    {
+      "check": "a hot temperature bypasses the cache",
+      "passed": true
+    },
+    {
+      "check": "an unknown model returns the host's own error status",
+      "passed": true
+    },
+    {
+      "check": "so does a stream to an unknown model",
+      "passed": true
+    },
+    {
+      "check": "token usage came back, so spend is counted",
+      "passed": true
+    },
+    {
+      "check": "the API key never appears in the proxy log",
+      "passed": true
+    },
+    {
+      "check": "openai/gpt-oss-120b answers and then hits",
+      "passed": true
+    }
+  ],
+  "requests": {
+    "first": {
+      "model": "openai/gpt-oss-20b",
+      "question": "What is the capital of Finland?",
+      "stream": false,
+      "status": 200,
+      "cache": "MISS",
+      "tier": "-",
+      "similarity": "0.0000",
+      "finish": "stop",
+      "answer": "The capital of Finland is **Helsinki**.",
+      "ms": 897.5
+    },
+    "repeat": {
+      "model": "openai/gpt-oss-20b",
+      "question": "What is the capital of Finland?",
+      "stream": false,
+      "status": 200,
+      "cache": "HIT",
+      "tier": "exact",
+      "similarity": "1.0000",
+      "finish": "stop",
+      "answer": "The capital of Finland is **Helsinki**.",
+      "ms": 13.2
+    },
+    "reworded": {
+      "model": "openai/gpt-oss-20b",
+      "question": "Which city is the capital of Finland?",
+      "stream": false,
+      "status": 200,
+      "cache": "HIT",
+      "tier": "semantic",
+      "similarity": "0.9819",
+      "finish": "stop",
+      "answer": "The capital of Finland is **Helsinki**.",
+      "ms": 76.6
+    },
+    "other": {
+      "model": "openai/gpt-oss-20b",
+      "question": "What is the capital of Sweden?",
+      "stream": false,
+      "status": 200,
+      "cache": "MISS",
+      "tier": "-",
+      "similarity": "0.6076",
+      "finish": "stop",
+      "answer": "The capital of Sweden is **Stockholm**.",
+      "ms": 488.0
+    },
+    "stream": {
+      "model": "openai/gpt-oss-20b",
+      "question": "In one sentence, what does the HTTP status code 404 mean?",
+      "stream": true,
+      "status": 200,
+      "cache": "MISS",
+      "tier": "-",
+      "similarity": "0.0257",
+      "finish": "stop",
+      "answer": "The HTTP status code\u202f404 means that the server could not find the requested resource.",
+      "ms": 454.4
+    },
+    "stream_again": {
+      "model": "openai/gpt-oss-20b",
+      "question": "In one sentence, what does the HTTP status code 404 mean?",
+      "stream": true,
+      "status": 200,
+      "cache": "HIT",
+      "tier": "exact",
+      "similarity": "1.0000",
+      "finish": "stop",
+      "answer": "The HTTP status code\u202f404 means that the server could not find the requested resource.",
+      "ms": 10.0
+    },
+    "hot": {
+      "model": "openai/gpt-oss-20b",
+      "question": "What is the capital of Finland?",
+      "stream": false,
+      "status": 200,
+      "cache": "BYPASS",
+      "tier": "-",
+      "similarity": "-",
+      "finish": "stop",
+      "answer": "The capital of Finland is **Helsinki**.",
+      "ms": 523.7
+    },
+    "bad_model": {
+      "model": "no-such-model-cachellm",
+      "question": "What is the capital of Finland?",
+      "stream": false,
+      "status": 404,
+      "cache": "-",
+      "tier": "-",
+      "similarity": "-",
+      "finish": "error",
+      "answer": "Error code: 404 - {'error': {'message': 'Upstream returned 404: {\"error\":{\"message\":\"The model `no-such-model-cachellm` does not exist or you do not have access to it.\",\"type\":\"invalid_request_error\",\"code\":\"model_not_found\"}}\\n', 'type': 'api_error', 'param': None, 'code': 'upstream_error'}}",
+      "ms": 86.0
+    },
+    "bad_model_stream": {
+      "model": "no-such-model-cachellm",
+      "question": "What is the capital of Finland?",
+      "stream": true,
+      "status": 404,
+      "cache": "-",
+      "tier": "-",
+      "similarity": "-",
+      "finish": "error",
+      "answer": "Error code: 404 - {'error': {'message': 'Upstream returned 404: {\"error\":{\"message\":\"The model `no-such-model-cachellm` does not exist or you do not have access to it.\",\"type\":\"invalid_request_error\",\"code\":\"model_not_found\"}}\\n', 'type': 'api_error', 'param': None, 'code': 'upstream_error'}}",
+      "ms": 83.5
+    },
+    "also0": {
+      "model": "openai/gpt-oss-120b",
+      "question": "What is the capital of Finland?",
+      "stream": false,
+      "status": 200,
+      "cache": "MISS",
+      "tier": "-",
+      "similarity": "0.0000",
+      "finish": "stop",
+      "answer": "The capital of Finland is **Helsinki**.",
+      "ms": 501.2
+    },
+    "also0_again": {
+      "model": "openai/gpt-oss-120b",
+      "question": "What is the capital of Finland?",
+      "stream": false,
+      "status": 200,
+      "cache": "HIT",
+      "tier": "exact",
+      "similarity": "1.0000",
+      "finish": "stop",
+      "answer": "The capital of Finland is **Helsinki**.",
+      "ms": 12.3
+    }
+  },
+  "spent_usd": 0.00012352,
+  "saved_usd": 0.00010568
+}

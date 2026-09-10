@@ -188,6 +188,8 @@ def analyse(
     exact = [r for r in hits if r.tier == "exact"]
     semantic = [r for r in hits if r.tier == "semantic"]
     hit_lat = percentiles([r.latency_ms for r in hits])
+    exact_lat = percentiles([r.latency_ms for r in exact])
+    semantic_lat = percentiles([r.latency_ms for r in semantic])
     miss_lat = percentiles([r.latency_ms for r in misses])
 
     by_kind: dict[str, dict[str, int]] = {}
@@ -224,7 +226,16 @@ def analyse(
             "semantic_hits": len(semantic),
             "semantic_share_of_hits": (round(len(semantic) / len(hits), 4) if hits else 0),
         },
-        "latency_ms": {"hit": hit_lat, "miss": miss_lat, "p95_speedup_factor": speedup},
+        # Exact and reworded hits are reported apart: a reworded hit has to run
+        # the embedding model, an exact one does not, and a single blended hit
+        # figure mostly describes the cheaper kind.
+        "latency_ms": {
+            "hit": hit_lat,
+            "hit_exact": exact_lat,
+            "hit_semantic": semantic_lat,
+            "miss": miss_lat,
+            "p95_speedup_factor": speedup,
+        },
         "similarity_of_semantic_hits": percentiles([r.similarity for r in semantic]),
         "by_request_kind": by_kind,
         "hit_rate_curve": hit_rate_curve(ok),
@@ -260,7 +271,11 @@ def to_markdown(report: dict[str, Any]) -> str:
         "",
         "| Latency (ms) | p50 | p95 | p99 |",
         "| --- | ---: | ---: | ---: |",
-        f"| Cache hit | {lat['hit'].get('p50', 0)} | {lat['hit'].get('p95', 0)} | "
+        f"| Cache hit, exact | {lat['hit_exact'].get('p50', 0)} | "
+        f"{lat['hit_exact'].get('p95', 0)} | {lat['hit_exact'].get('p99', 0)} |",
+        f"| Cache hit, reworded | {lat['hit_semantic'].get('p50', 0)} | "
+        f"{lat['hit_semantic'].get('p95', 0)} | {lat['hit_semantic'].get('p99', 0)} |",
+        f"| Cache hit, all | {lat['hit'].get('p50', 0)} | {lat['hit'].get('p95', 0)} | "
         f"{lat['hit'].get('p99', 0)} |",
         f"| Cache miss | {lat['miss'].get('p50', 0)} | {lat['miss'].get('p95', 0)} | "
         f"{lat['miss'].get('p99', 0)} |",

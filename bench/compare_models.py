@@ -57,11 +57,23 @@ async def score_model(model: str, dim: int, pairs: list[dict[str, Any]]) -> dict
 
     sims = np.array([float(np.dot(a, b)) for a, b in zip(vectors_a, vectors_b, strict=True)])
 
-    # Latency of a single embed call, which is the floor for every semantic hit.
-    single_started = time.perf_counter()
-    for _ in range(20):
-        await embedder.embed(f"latency probe {time.perf_counter()}")
-    embed_ms = (time.perf_counter() - single_started) / 20 * 1000
+    # One embed call on a real question is the floor for every reworded hit.
+    # Time the corpus's own questions through a copy with its cache off, so
+    # every call runs the model. This used to time twenty synthetic strings
+    # like "latency probe 123.4" and report the mean, which says little about
+    # the questions people actually send. Still sensitive to CPU load: run it
+    # on a quiet machine and read the column as a ranking first.
+    probe = FastEmbedEmbedder(model_name=model, dim=dim, cache_size=0)
+    questions = list(dict.fromkeys(texts_a + texts_b))
+    for text in questions[:10]:
+        await probe.embed(text)
+    timings: list[float] = []
+    for text in questions:
+        started_one = time.perf_counter()
+        await probe.embed(text)
+        timings.append((time.perf_counter() - started_one) * 1000)
+    embed_p50 = float(np.percentile(timings, 50))
+    embed_p95 = float(np.percentile(timings, 95))
 
     best_safe: dict[str, Any] | None = None
     best_1pct: dict[str, Any] | None = None
@@ -89,7 +101,9 @@ async def score_model(model: str, dim: int, pairs: list[dict[str, Any]]) -> dict
     return {
         "model": model,
         "dim": dim,
-        "embed_ms_per_call": round(embed_ms, 2),
+        "embed_ms_p50": round(embed_p50, 2),
+        "embed_ms_p95": round(embed_p95, 2),
+        "embed_questions_timed": len(timings),
         "embed_seconds_for_corpus": round(embed_seconds, 2),
         "duplicates_mean": round(dup_mean, 4),
         "duplicates_min": round(float(sims[labels].min()), 4),
@@ -103,16 +117,16 @@ async def score_model(model: str, dim: int, pairs: list[dict[str, Any]]) -> dict
 
 def to_markdown(rows: list[dict[str, Any]]) -> str:
     lines = [
-        "| Model | Dim | Embed ms | Mean dup score | Worst hard negative | Separation | "
-        "Safe threshold | Recall there |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Model | Dim | Embed ms p50 | Embed ms p95 | Mean dup score | Worst hard negative | "
+        "Separation | Safe threshold | Recall there |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
         safe = row["safe_operating_point"] or {}
         threshold = f"{safe['threshold']:.2f}" if safe else "n/a"
         recall = f"{safe['recall']:.1%}" if safe else "n/a"
         lines.append(
-            f"| `{row['model']}` | {row['dim']} | {row['embed_ms_per_call']} | "
+            f"| `{row['model']}` | {row['dim']} | {row['embed_ms_p50']} | {row['embed_ms_p95']} | "
             f"{row['duplicates_mean']:.3f} | {row['hard_negative_max']:.3f} | "
             f"{row['separation']:+.3f} | {threshold} | {recall} |"
         )

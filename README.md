@@ -3,13 +3,13 @@
 [![CI](https://github.com/adarshcod30/CacheLLM/actions/workflows/ci.yml/badge.svg)](https://github.com/adarshcod30/CacheLLM/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-301%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-327%20passing-brightgreen)](tests/)
 [![PyPI](https://img.shields.io/pypi/v/cachellm-proxy)](https://pypi.org/project/cachellm-proxy/)
 [![Hit rate](https://img.shields.io/badge/hit%20rate-77%25%20on%20Bedrock-orange)](docs/evaluation.md)
 
 **A drop-in semantic cache for OpenAI-compatible LLM APIs. Change one base URL, and questions your model has already answered come back in milliseconds instead of seconds.**
 
-On a 2,000-request replay against **AWS Bedrock** it served **77% of traffic from cache** with **zero false positives** on genuinely new questions, cutting spend by **78%** and p95 latency from 1,023 ms to **5.7 ms**.
+On a 2,000-request replay against **AWS Bedrock** it served **77% of traffic from cache** with **zero false positives** on genuinely new questions, cutting spend by **78%** and p95 latency from 1,023 ms to **5.7 ms** on a cache hit, or 9.7 ms when the question was reworded.
 
 [Quick start](#quick-start) · [How it works](#how-it-works) · [Evaluation](docs/evaluation.md) · [API reference](#api-reference) · [Deployment](#deployment-and-infrastructure)
 
@@ -47,7 +47,8 @@ Everything else stays the same: same request shape, same response shape, same er
 | False positives on genuinely new questions | **0 of 368** |
 | Reworded repeats served from cache | 95.2% |
 | Exact repeats served from cache | 99.3% |
-| p95 latency, cache hit | **5.7 ms** |
+| p95 latency, any cache hit | **5.7 ms** |
+| p95 latency, reworded hit | 9.7 ms |
 | p95 latency, cache miss | 1,022.8 ms |
 | p95 speedup | **178.8x** |
 | Cost reduction | **78.0%** |
@@ -207,7 +208,7 @@ This is where a caching project usually hand-waves. The full write-up is in [doc
 
 **Result 2: thresholds do not transfer between models.** The safe threshold ranges from 0.89 for MiniLM to 0.98 for Arctic-embed. Every model tested had negative separation, meaning the mean duplicate score sat below the worst hard negative. Bigger and slower did not fix it.
 
-| Model | Safe threshold | Recall there | Embed ms |
+| Model | Safe threshold | Recall there | Embed ms, short probe |
 | --- | ---: | ---: | ---: |
 | `all-MiniLM-L6-v2` | **0.89** | **35.0%** | 5.7 |
 | `gte-base` | 0.96 | 26.0% | 20.6 |
@@ -216,7 +217,7 @@ This is where a caching project usually hand-waves. The full write-up is in [doc
 | `snowflake-arctic-embed-s` | 0.98 | 11.4% | 3.2 |
 | `bge-small-en-v1.5` | 0.96 | 8.1% | 3.8 |
 
-MiniLM gives four times the safe recall of bge-small at a third of the download size, so it is the default. The whole table ships in code as `CALIBRATED_THRESHOLDS`, and the proxy warns at startup if you configure a model it has never measured.
+MiniLM gives four times the safe recall of bge-small, for a slightly larger download of 86 MB against 63 MB, so it is the default. The embed column is a ranking from short synthetic strings, not what a real question costs. The load test measures that directly. The whole table ships in code as `CALIBRATED_THRESHOLDS`, and the proxy warns at startup if you configure a model it has never measured.
 
 **Result 3, a negative one: a lexical guard does not rescue it.** The obvious fix is to require matched prompts to share content words. Measured, hard negatives have *higher* token overlap (0.42 mean) than genuine paraphrases share vocabulary, because they differ by exactly one decisive word. The guard rejects good matches and keeps dangerous ones. It was measured and dropped rather than shipped.
 
@@ -316,7 +317,7 @@ One environment variable per host. Everything except Bedrock speaks the OpenAI p
 | Host | `CACHELLM_OPENAI_BASE_URL` | Example model |
 | --- | --- | --- |
 | OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
-| Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
+| Groq | `https://api.groq.com/openai/v1` | `openai/gpt-oss-20b` |
 | Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai/` | `gemini-2.5-flash` |
 | Anthropic | `https://api.anthropic.com/v1` | `claude-haiku-4-5` |
 | OpenRouter | `https://openrouter.ai/api/v1` | `anthropic/claude-3.5-sonnet` |
@@ -329,6 +330,10 @@ CACHELLM_OPENAI_BASE_URL=https://api.groq.com/openai/v1 \
 CACHELLM_OPENAI_API_KEY=gsk_your_key \
 cachellm serve
 ```
+
+If the key is already in its usual variable, such as `GROQ_API_KEY` or `GEMINI_API_KEY`, you can skip both lines: the proxy finds it at startup and says which host it picked.
+
+**Checked live, not just in tests.** On 2026-09-11 the proxy was run against real **Google Gemini** (`gemini-2.5-flash`, `gemini-3.5-flash`) and **Groq** (`openai/gpt-oss-20b`, `openai/gpt-oss-120b`), driven by the official OpenAI SDK, alongside the AWS Bedrock benchmark. Each run covers a miss, an exact hit, a reworded hit, a similar question that must not hit, a stream and its replay, a hot-temperature bypass and an unknown model's error, and checks that the API key never reaches the log. Results are in [docs/evaluation.md](docs/evaluation.md#live-provider-checks), and `bench/live_check.py` reruns them with your own key. The other hosts share the same adapter and its tests, but have not yet been run against the real service.
 
 **AWS Bedrock** is the one exception, because it does not speak the OpenAI protocol. It needs the `aws` extra, and then uses your existing AWS credentials with no vendor API key at all:
 
@@ -351,7 +356,7 @@ Three rules, in order. You never configure a model list.
 2. **A recognisable vendor convention.** Bedrock ids are always `vendor.model`, so `amazon.nova-lite-v1:0` and `us.anthropic.claude-3-haiku-20240307-v1:0` are identified with no prefix. OpenAI's own families (`gpt-`, `o1`, `o3`, `text-embedding-`) are identified the same way, whatever the default is.
 3. **Otherwise the configured default**, which is the OpenAI-compatible adapter. Names like `llama3.2`, `mixtral-8x7b-32768` and `qwen2.5-coder:7b` are served by Groq, Ollama, Together and OpenRouter alike, so the endpoint you configured is the only sensible answer.
 
-Model ids that legitimately contain a slash, which OpenRouter and Together both use, are forwarded whole. Only this proxy's own prefixes are stripped. Note that `anthropic.claude-…` with a dot is a Bedrock id while `anthropic/claude-…` with a slash is an OpenRouter id, and the router tells them apart.
+Model ids that legitimately contain a slash, which OpenRouter and Together both use, are forwarded whole. Only this proxy's own prefixes are stripped, and `openai/` only when the upstream is OpenAI itself: Groq, OpenRouter and Together name OpenAI's models `openai/gpt-oss-120b`, so to them the prefix is part of the id. Note that `anthropic.claude-…` with a dot is a Bedrock id while `anthropic/claude-…` with a slash is an OpenRouter id, and the router tells them apart.
 
 Ask it directly if you are unsure:
 
@@ -359,6 +364,39 @@ Ask it directly if you are unsure:
 curl -s localhost:8080/admin/route/meta-llama/Llama-3.3-70B-Instruct-Turbo
 curl -s localhost:8080/admin/providers
 ```
+
+### Where the cache lives
+
+One setting, `CACHELLM_BACKEND`, with three values. Most people never touch it.
+
+| Value | What happens | Choose it when |
+| --- | --- | --- |
+| `auto`, the default | Redis if the extra is installed and a usable server answers, the in-process cache otherwise | You have no opinion |
+| `memory` | A numpy matrix inside the proxy. Nothing to install | One process: a laptop, a side project, a single server |
+| `redis` | One Redis server shared by every copy of the proxy | Several processes must share one cache |
+
+Memory is not the slow option. Below roughly 100,000 entries it is the faster one: scanning 20,000 cached prompts takes 0.85 ms, while a Redis round trip alone costs 2 to 3 ms. Redis earns its place when several processes need one shared cache. Run four copies of the proxy on memory and you have four separate caches, each a quarter as warm.
+
+Memory can survive a restart too. Give it a file, and it saves there on a clean shutdown and loads it back on start:
+
+```bash
+CACHELLM_MEMORY_SNAPSHOT_PATH=$HOME/.cachellm/cache.npz cachellm serve
+```
+
+**Setting up Redis.** Install the extra, then run a Redis 8 server:
+
+```bash
+pip install "cachellm-proxy[redis]"
+brew install redis && brew services start redis    # macOS
+docker run -d -p 6379:6379 redis:8-alpine          # anywhere with Docker
+```
+
+The server has two requirements, and both are checked at startup:
+
+- **It needs the search module**, which is what stores and searches vectors. Redis 8 from Homebrew or the official Docker image includes it. Many Linux distribution packages ship an older Redis without it, so prefer the Docker image there. A hosted Redis works if its plan includes search.
+- **It has to be database 0**, because Redis search cannot index any other. Keep several apps apart with `CACHELLM_INDEX_NAME` instead.
+
+If either is missing, `auto` uses memory and says exactly why, both in a startup warning and at the top of `cachellm stats`. With `CACHELLM_BACKEND=redis` the proxy never switches storage behind your back. It keeps answering without a cache and reports itself degraded until Redis is fixed.
 
 ## API reference
 
@@ -456,7 +494,7 @@ Every setting is an environment variable prefixed `CACHELLM_`, or a line in `.en
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `CACHELLM_BACKEND` | `auto` | `memory` needs nothing, `redis` shares one cache across workers, `auto` uses Redis when reachable and memory when not |
-| `CACHELLM_REDIS_URL` | `redis://localhost:6379/0` | Must be database 0. Redis Search cannot index any other |
+| `CACHELLM_REDIS_URL` | `redis://localhost:6379/0` | Must be database 0, and the server needs the search module. See [Where the cache lives](#where-the-cache-lives) |
 | `CACHELLM_MEMORY_MAX_ENTRIES` | `50000` | Cap for the in-memory store. 50k of 384-dim vectors is about 73 MB |
 | `CACHELLM_MEMORY_SNAPSHOT_PATH` | unset | Persist the in-memory cache to this file so a restart does not start cold |
 | `CACHELLM_API_KEYS` | empty | Comma-separated client keys. Empty disables auth, which is local development only |
@@ -467,7 +505,7 @@ Every setting is an environment variable prefixed `CACHELLM_`, or a line in `.en
 | `CACHELLM_TTL_VOLATILE` | `900` | Fifteen minutes for anything about now |
 | `CACHELLM_MAX_CACHEABLE_TEMPERATURE` | `0.3` | Above this, nothing is cached |
 | `CACHELLM_PII_GUARD` | `true` | Refuse to store prompts that look personal |
-| `CACHELLM_DEFAULT_PROVIDER` | `bedrock` | `bedrock`, `openai` or `fake` |
+| `CACHELLM_DEFAULT_PROVIDER` | `openai` | `openai` covers every OpenAI-compatible host. Also `bedrock` or `fake`. Left unset, the proxy picks from the keys it finds |
 | `CACHELLM_LOG_PROMPTS` | `false` | Prompt text stays out of logs unless you opt in |
 
 ## Deployment and infrastructure
@@ -536,7 +574,7 @@ cachellm/
 ## Testing
 
 ```bash
-make test          # 126 tests
+make test          # 327 tests
 make test-cov      # with coverage
 make lint          # ruff and mypy
 ```

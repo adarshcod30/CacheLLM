@@ -72,7 +72,7 @@ them. This is the single most important thing measuring produced.
 Six models, each scored at the highest threshold that served **zero** hard
 negatives, and the recall available there:
 
-| Model | Dim | Embed ms | Mean duplicate score | Worst hard negative | Separation | Safe threshold | Recall there |
+| Model | Dim | Embed ms, short probe | Mean duplicate score | Worst hard negative | Separation | Safe threshold | Recall there |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `sentence-transformers/all-MiniLM-L6-v2` | 384 | 5.7 | 0.795 | 0.886 | -0.091 | **0.89** | **35.0%** |
 | `thenlper/gte-base` | 768 | 20.6 | 0.930 | 0.955 | -0.026 | 0.96 | 26.0% |
@@ -94,8 +94,20 @@ overlap. Not one of these models can cleanly separate a paraphrase from a
 one-word-flipped opposite. Bigger and slower did not fix it: `gte-base` is
 768-dimensional and four times slower than MiniLM, and still overlaps.
 
-MiniLM won on the metric that matters, gives 4x the safe recall of bge-small,
-and downloads 90 MB instead of 130 MB. It is the default.
+MiniLM won on the metric that matters and gives 4x the safe recall of
+bge-small, for a slightly larger download: 86 MB against 63 MB for the
+quantized bge-small that fastembed fetches. It is the default.
+
+**Read the embed column as a ranking, not a price.** It timed twenty synthetic
+strings such as `latency probe 1234.5` on a quiet machine and took the mean.
+Real questions cost more. In the Bedrock load test below, reworded hits, which
+include embedding the new wording, took 3.5 ms at the median and 9.7 ms at p95
+end to end. Embedding time also grows with prompt length and with CPU
+contention: timed again on the same Mac while six unrelated processes held its
+cores, the corpus questions took about 9 ms at the median and 30-word questions
+about 20 ms. `bench/compare_models.py` now times the corpus's own questions with
+the embedding cache off and reports the median and p95. Rerun it on a quiet
+machine before quoting a figure from it.
 
 ## Finding 3: a lexical guard does not rescue it
 
@@ -205,10 +217,18 @@ Against Bedrock, broken down by what each request actually was:
 
 | Latency (ms) | p50 | p95 | p99 |
 | --- | ---: | ---: | ---: |
-| Cache hit | 2.6 | **5.7** | 10.2 |
+| Cache hit, exact | 2.5 | 4.9 | 6.6 |
+| Cache hit, reworded | 3.5 | **9.7** | 14.5 |
+| Cache hit, all | 2.6 | **5.7** | 10.2 |
 | Cache miss | 797.0 | 1,022.8 | 1,351.8 |
 
-p95 speedup: **178.8x**. Cost reduction: **78.0%**. Hit rate warmed from 44% in
+A reworded hit has to run the embedding model and an exact one does not, so a
+single hit figure mostly describes the cheaper kind: 82% of these hits were
+exact. Earlier versions of this page showed only the blended row. Both are
+computed from the same 2,000 recorded requests, and `bench/replay.py` now
+reports them apart.
+
+p95 speedup: **178.8x** across all hits, 105x for reworded hits alone. Cost reduction: **78.0%**. Hit rate warmed from 44% in
 the first 100 requests to 87% in the last 100. Semantic hits scored a median
 0.95 similarity, well clear of the 0.89 threshold.
 
@@ -229,14 +249,71 @@ The system prompt is not a trick to flatter the number. It keeps a verbose model
 from running into `max_tokens`, which would leave its answers uncacheable, and
 almost every production application has one anyway.
 
+## Live provider checks
+
+The load test proves the cache against one real provider. These runs prove the
+adapter against two more. Every request goes through a real proxy to the real
+service, driven by the official OpenAI SDK, and the key is found by
+auto-detection exactly as it would be on anyone else's machine. Run on
+2026-09-11.
+
+| | Google Gemini | Groq |
+| --- | --- | --- |
+| Models | `gemini-2.5-flash`, `models/gemini-3.5-flash` | `openai/gpt-oss-20b`, `openai/gpt-oss-120b` |
+| Found through | `GEMINI_API_KEY` | `GROQ_API_KEY` |
+| Checks passed | **14 of 14** | **14 of 14** |
+| Reworded question | scored 0.982, served from cache | scored 0.982, served from cache |
+| Sweden asked after Finland | scored 0.608, correctly not served | scored 0.608, correctly not served |
+| Real spend for the whole run | $0.00023 | $0.00012 |
+
+Each run asks a first question, the same question again, a rewording, a
+different country, a stream and its repeat, a hot temperature, and an unknown
+model both plain and streamed, then asks each extra model twice. It passes only
+if every request behaves as designed, the replayed stream matches the original
+character for character, token usage comes back so spend is counted, and the
+key never appears in the proxy's log. The raw results are in
+[`results/live/`](../results/live/). Rerun one with your own key:
+
+```bash
+GROQ_API_KEY=gsk_... uv run python bench/live_check.py \
+  --var GROQ_API_KEY --model openai/gpt-oss-20b --name groq
+```
+
+The machine was busy with unrelated work during these runs, so their timings
+are not benchmarks. The load test above is the latency measurement.
+
+**What the live runs found that 301 passing tests had not:**
+
+1. **Groq's main models could not be reached at all.** Groq's two main chat
+   models are `openai/gpt-oss-20b` and `openai/gpt-oss-120b`, and the proxy
+   read the `openai/` as its own routing hint and removed it, so Groq answered
+   every request with a 404. The prefix is now removed only when the upstream
+   is OpenAI itself. The catalog's examples were stale too: all three Groq
+   examples had been retired, and so had two of the three for Gemini.
+2. **A stream that failed upstream looked like a success.** Streaming a request
+   for an unknown model returned HTTP 200 and an empty answer, because the
+   proxy began its response before the upstream replied. It now waits for the
+   first event, so the caller gets the host's own status code, and a failure
+   partway through ends the stream with the error event the OpenAI SDKs raise.
+3. **A `.env` file lost to auto-detection.** Preparing the Gemini run showed
+   that a base URL written in `.env` was replaced by Gemini's the moment
+   `GEMINI_API_KEY` was exported, because detection only looked at exported
+   variables.
+
+Each fix has a regression test that fails on the old code. The other catalogued
+hosts share the adapter and its tests, but have not yet been run against the
+real service.
+
 ## What this means for a deployment
 
 1. **The exact tier does the heavy lifting.** 82% of hits came from exact
-   matching, which is free, costs about 2.6 ms and cannot be semantically
-   wrong. Any semantic cache without an exact tier in front of it is leaving
+   matching, which needs no model, costs about 2.5 ms and cannot be
+   semantically wrong. Any semantic cache without an exact tier in front of it is leaving
    the safest wins on the table.
 2. **The semantic tier is a bonus, not the foundation.** It added 275 hits,
-   close to 14 points of hit rate, at a real risk that has to be measured.
+   close to 14 points of hit rate, at a real risk that has to be measured and
+   at the cost of an embedding each: 9.7 ms at p95, against 4.9 ms for an exact
+   hit.
 3. **Instrument the reasons you refuse to cache.** The 8.9% run above was a
    correct safety rule with no voice. Counting refusals by reason turned a
    day of confusion into one line of output.

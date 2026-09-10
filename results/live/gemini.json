@@ -1,0 +1,201 @@
+{
+  "name": "gemini",
+  "model": "gemini-2.5-flash",
+  "detected": "Google Gemini at https://generativelanguage.googleapis.com/v1beta/openai/ (GEMINI_API_KEY is set)",
+  "run_at": "2026-09-10T23:12:46+00:00",
+  "passed": true,
+  "checks": [
+    {
+      "check": "the first ask is a miss answered by the model",
+      "passed": true
+    },
+    {
+      "check": "the same question again is an exact hit",
+      "passed": true
+    },
+    {
+      "check": "a reworded question is a meaning hit",
+      "passed": true
+    },
+    {
+      "check": "hits return the stored answer word for word",
+      "passed": true
+    },
+    {
+      "check": "a different country is not served Finland's answer",
+      "passed": true
+    },
+    {
+      "check": "a stream is answered live on a miss",
+      "passed": true
+    },
+    {
+      "check": "the same stream again is a hit",
+      "passed": true
+    },
+    {
+      "check": "the replayed stream matches the original exactly",
+      "passed": true
+    },
+    {
+      "check": "a hot temperature bypasses the cache",
+      "passed": true
+    },
+    {
+      "check": "an unknown model returns the host's own error status",
+      "passed": true
+    },
+    {
+      "check": "so does a stream to an unknown model",
+      "passed": true
+    },
+    {
+      "check": "token usage came back, so spend is counted",
+      "passed": true
+    },
+    {
+      "check": "the API key never appears in the proxy log",
+      "passed": true
+    },
+    {
+      "check": "models/gemini-3.5-flash answers and then hits",
+      "passed": true
+    }
+  ],
+  "requests": {
+    "first": {
+      "model": "gemini-2.5-flash",
+      "question": "What is the capital of Finland?",
+      "stream": false,
+      "status": 200,
+      "cache": "MISS",
+      "tier": "-",
+      "similarity": "0.0000",
+      "finish": "stop",
+      "answer": "The capital of Finland is **Helsinki**.",
+      "ms": 2001.7
+    },
+    "repeat": {
+      "model": "gemini-2.5-flash",
+      "question": "What is the capital of Finland?",
+      "stream": false,
+      "status": 200,
+      "cache": "HIT",
+      "tier": "exact",
+      "similarity": "1.0000",
+      "finish": "stop",
+      "answer": "The capital of Finland is **Helsinki**.",
+      "ms": 1.3
+    },
+    "reworded": {
+      "model": "gemini-2.5-flash",
+      "question": "Which city is the capital of Finland?",
+      "stream": false,
+      "status": 200,
+      "cache": "HIT",
+      "tier": "semantic",
+      "similarity": "0.9819",
+      "finish": "stop",
+      "answer": "The capital of Finland is **Helsinki**.",
+      "ms": 7.2
+    },
+    "other": {
+      "model": "gemini-2.5-flash",
+      "question": "What is the capital of Sweden?",
+      "stream": false,
+      "status": 200,
+      "cache": "MISS",
+      "tier": "-",
+      "similarity": "0.6076",
+      "finish": "stop",
+      "answer": "The capital of Sweden is **Stockholm**.",
+      "ms": 1316.4
+    },
+    "stream": {
+      "model": "gemini-2.5-flash",
+      "question": "In one sentence, what does the HTTP status code 404 mean?",
+      "stream": true,
+      "status": 200,
+      "cache": "MISS",
+      "tier": "-",
+      "similarity": "0.0257",
+      "finish": "stop",
+      "answer": "The HTTP status code 404 means that the server could not find the requested resource.",
+      "ms": 2534.5
+    },
+    "stream_again": {
+      "model": "gemini-2.5-flash",
+      "question": "In one sentence, what does the HTTP status code 404 mean?",
+      "stream": true,
+      "status": 200,
+      "cache": "HIT",
+      "tier": "exact",
+      "similarity": "1.0000",
+      "finish": "stop",
+      "answer": "The HTTP status code 404 means that the server could not find the requested resource.",
+      "ms": 1.7
+    },
+    "hot": {
+      "model": "gemini-2.5-flash",
+      "question": "What is the capital of Finland?",
+      "stream": false,
+      "status": 200,
+      "cache": "BYPASS",
+      "tier": "-",
+      "similarity": "-",
+      "finish": "stop",
+      "answer": "The capital of Finland is **Helsinki**.",
+      "ms": 1625.9
+    },
+    "bad_model": {
+      "model": "no-such-model-cachellm",
+      "question": "What is the capital of Finland?",
+      "stream": false,
+      "status": 404,
+      "cache": "-",
+      "tier": "-",
+      "similarity": "-",
+      "finish": "error",
+      "answer": "Error code: 404 - {'error': {'message': 'Upstream returned 404: [{\\n  \"error\": {\\n    \"code\": 404,\\n    \"message\": \"models/no-such-model-cachellm is not found for API version v1main, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their s",
+      "ms": 334.0
+    },
+    "bad_model_stream": {
+      "model": "no-such-model-cachellm",
+      "question": "What is the capital of Finland?",
+      "stream": true,
+      "status": 404,
+      "cache": "-",
+      "tier": "-",
+      "similarity": "-",
+      "finish": "error",
+      "answer": "Error code: 404 - {'error': {'message': 'Upstream returned 404: [{\\n  \"error\": {\\n    \"code\": 404,\\n    \"message\": \"models/no-such-model-cachellm is not found for API version v1main, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their s",
+      "ms": 409.0
+    },
+    "also0": {
+      "model": "models/gemini-3.5-flash",
+      "question": "What is the capital of Finland?",
+      "stream": false,
+      "status": 200,
+      "cache": "MISS",
+      "tier": "-",
+      "similarity": "0.0000",
+      "finish": "stop",
+      "answer": "The capital of Finland is **Helsinki**.",
+      "ms": 14464.6
+    },
+    "also0_again": {
+      "model": "models/gemini-3.5-flash",
+      "question": "What is the capital of Finland?",
+      "stream": false,
+      "status": 200,
+      "cache": "HIT",
+      "tier": "exact",
+      "similarity": "1.0000",
+      "finish": "stop",
+      "answer": "The capital of Finland is **Helsinki**.",
+      "ms": 3.6
+    }
+  },
+  "spent_usd": 0.0002343,
+  "saved_usd": 0.0002094
+}
