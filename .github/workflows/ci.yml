@@ -1,0 +1,158 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The hashing embedder keeps CI offline and deterministic: no 90 MB model
+  # download, identical results on every runner.
+  CACHELLM_EMBEDDING_BACKEND: hash
+  CACHELLM_DEFAULT_PROVIDER: fake
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --all-extras
+      - name: ruff (lint)
+        run: uv run ruff check src tests bench eval
+      - name: ruff (format)
+        run: uv run ruff format --check src tests bench eval
+      - name: mypy
+        run: uv run mypy
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    services:
+      redis:
+        # Redis 8 ships the query engine, which the vector index needs.
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+      - run: uv sync --frozen --all-extras
+      - name: Confirm Redis has the query engine
+        run: |
+          uv run python - <<'PY'
+          import redis
+          client = redis.from_url("redis://localhost:6379/0")
+          client.execute_command("FT.CREATE", "ci_probe", "ON", "HASH", "PREFIX", "1", "p:",
+                                 "SCHEMA", "v", "VECTOR", "HNSW", "6", "TYPE", "FLOAT32",
+                                 "DIM", "4", "DISTANCE_METRIC", "COSINE")
+          client.execute_command("FT.DROPINDEX", "ci_probe")
+          print("Redis query engine present")
+          PY
+      - name: Tests
+        env:
+          CACHELLM_TEST_REDIS_URL: redis://localhost:6379/0
+        run: uv run pytest --cov --cov-report=term-missing --cov-report=xml
+      - name: Upload coverage
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+
+  smoke:
+    name: End-to-end smoke test
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Start the proxy
+        env:
+          CACHELLM_FAKE_LATENCY_MS: "50"
+        run: |
+          uv run uvicorn cachellm.api.app:create_app --factory --port 8080 &
+          for _ in $(seq 1 40); do
+            curl -sf http://127.0.0.1:8080/healthz && break
+            sleep 1
+          done
+      - name: Replay a small workload and assert the cache actually works
+        run: |
+          uv run python -m bench.replay --requests 300 --concurrency 8 --reset \
+            --out-dir results
+          uv run python - <<'PY'
+          import json, sys
+          report = json.load(open("results/load_test.json"))
+          hit_rate = report["outcomes"]["hit_rate"]
+          errors = report["run"]["errors"]
+          unseen = report["by_request_kind"].get("unseen", {})
+          false_hits = unseen.get("HIT", 0)
+          print(f"hit rate {hit_rate:.1%}, errors {errors}, false hits {false_hits}")
+          assert errors == 0, "requests failed"
+          assert hit_rate > 0.5, f"hit rate collapsed to {hit_rate}"
+          # Never-before-seen questions must not be answered from cache.
+          assert false_hits == 0, f"{false_hits} false positives on unseen prompts"
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: load-test
+          path: results/
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: cachellm:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Boot it and check health
+        run: |
+          docker network create cachellm-ci
+          docker run -d --name redis --network cachellm-ci redis:8-alpine
+          docker run -d --name cachellm --network cachellm-ci -p 8080:8080 \
+            -e CACHELLM_REDIS_URL=redis://redis:6379/0 \
+            -e CACHELLM_DEFAULT_PROVIDER=fake \
+            cachellm:ci
+          for _ in $(seq 1 40); do
+            curl -sf http://127.0.0.1:8080/healthz && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:8080/readyz | tee /dev/stderr | grep -q '"cache_available":true'
+          docker logs cachellm

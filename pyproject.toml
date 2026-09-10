@@ -1,0 +1,147 @@
+[project]
+name = "cachellm"
+version = "0.1.0"
+description = "A drop-in semantic cache for OpenAI-compatible LLM APIs: match requests by meaning, serve repeats instantly, cut spend."
+readme = "README.md"
+authors = [
+    { name = "Adarsh Dwivedi", email = "adarshdwivedi256@gmail.com" }
+]
+requires-python = ">=3.11"
+license = "MIT"
+keywords = [
+    "llm", "cache", "semantic-cache", "openai", "bedrock", "proxy",
+    "vector-search", "redis", "fastapi", "llmops", "cost-optimization",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+dependencies = [
+    "boto3>=1.43.91",
+    "fastapi>=0.141.1",
+    "fastembed>=0.8.0",
+    "httpx>=0.28.1",
+    "numpy>=2.4.6",
+    "openai>=3.11.0",
+    "prometheus-client>=0.26.0",
+    "pydantic-settings>=2.15.0",
+    "redis>=8.1.0",
+    "redisvl>=0.27.1",
+    "structlog>=26.1.0",
+    "typer>=0.27.2",
+    "uvicorn[standard]>=0.52.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/adarshcod30/cachellm"
+Repository = "https://github.com/adarshcod30/cachellm"
+Issues = "https://github.com/adarshcod30/cachellm/issues"
+
+[project.scripts]
+cachellm = "cachellm:main"
+
+[project.optional-dependencies]
+observability = [
+    "langfuse>=4.15.2",
+    "opentelemetry-exporter-otlp-proto-http>=1.44.0",
+    "opentelemetry-instrumentation-botocore>=0.65b0",
+    "opentelemetry-instrumentation-fastapi>=0.65b0",
+    "opentelemetry-instrumentation-httpx>=0.65b0",
+    "opentelemetry-instrumentation-redis>=0.65b0",
+    "opentelemetry-sdk>=1.44.0",
+]
+datasets = [
+    "datasets>=5.0.1",
+    "pandas>=3.0.5",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.23,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.6",
+]
+
+
+# ---------------------------------------------------------------- tooling
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests", "bench", "eval"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes
+    "I",         # isort
+    "N",         # pep8-naming
+    "UP",        # pyupgrade
+    "B",         # bugbear
+    "C4",        # comprehensions
+    "SIM",       # simplify
+    "RUF",       # ruff-specific
+    "ASYNC",     # async correctness
+    "TID",       # tidy imports
+]
+ignore = [
+    "E501",    # line length is handled by the formatter
+    "B008",    # FastAPI Depends() in defaults is the documented pattern
+    "RUF012",  # mutable class attrs without ClassVar
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "N806"]
+"bench/*" = ["T201"]
+"eval/*" = ["T201"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["cachellm"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src/cachellm"]
+ignore_missing_imports = true
+warn_unused_configs = true
+warn_redundant_casts = true
+no_implicit_optional = true
+check_untyped_defs = true
+disallow_untyped_defs = false
+plugins = []
+
+[[tool.mypy.overrides]]
+module = ["redisvl.*", "fastembed.*"]
+ignore_errors = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-q --strict-markers"
+markers = [
+    "integration: needs a live Redis on CACHELLM_TEST_REDIS_URL",
+    "aws: needs working AWS credentials and Bedrock access",
+]
+filterwarnings = [
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["src/cachellm"]
+omit = ["*/__main__.py"]
+
+[tool.coverage.report]
+skip_empty = true
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]

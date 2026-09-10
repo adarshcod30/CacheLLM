@@ -1,0 +1,143 @@
+{
+  "pairs": 193,
+  "models": [
+    {
+      "model": "sentence-transformers/all-MiniLM-L6-v2",
+      "dim": 384,
+      "embed_ms_per_call": 5.65,
+      "embed_seconds_for_corpus": 9.94,
+      "duplicates_mean": 0.7948,
+      "duplicates_min": 0.1142,
+      "non_duplicates_max": 0.8858,
+      "hard_negative_max": 0.8858,
+      "separation": -0.091,
+      "safe_operating_point": {
+        "threshold": 0.89,
+        "recall": 0.3496,
+        "false_hits": 0,
+        "hard_negative_hits": 0
+      },
+      "under_1pct_false_positives": {
+        "threshold": 0.88,
+        "recall": 0.3821,
+        "false_hits": 1,
+        "hard_negative_hits": 1
+      }
+    },
+    {
+      "model": "thenlper/gte-base",
+      "dim": 768,
+      "embed_ms_per_call": 20.61,
+      "embed_seconds_for_corpus": 23.65,
+      "duplicates_mean": 0.9296,
+      "duplicates_min": 0.768,
+      "non_duplicates_max": 0.9553,
+      "hard_negative_max": 0.9553,
+      "separation": -0.0257,
+      "safe_operating_point": {
+        "threshold": 0.96,
+        "recall": 0.2602,
+        "false_hits": 0,
+        "hard_negative_hits": 0
+      },
+      "under_1pct_false_positives": {
+        "threshold": 0.96,
+        "recall": 0.2602,
+        "false_hits": 0,
+        "hard_negative_hits": 0
+      }
+    },
+    {
+      "model": "jinaai/jina-embeddings-v2-small-en",
+      "dim": 512,
+      "embed_ms_per_call": 1.91,
+      "embed_seconds_for_corpus": 8.03,
+      "duplicates_mean": 0.9078,
+      "duplicates_min": 0.6814,
+      "non_duplicates_max": 0.9585,
+      "hard_negative_max": 0.9585,
+      "separation": -0.0507,
+      "safe_operating_point": {
+        "threshold": 0.96,
+        "recall": 0.1626,
+        "false_hits": 0,
+        "hard_negative_hits": 0
+      },
+      "under_1pct_false_positives": {
+        "threshold": 0.96,
+        "recall": 0.1626,
+        "false_hits": 0,
+        "hard_negative_hits": 0
+      }
+    },
+    {
+      "model": "BAAI/bge-base-en-v1.5",
+      "dim": 768,
+      "embed_ms_per_call": 8.92,
+      "embed_seconds_for_corpus": 14.17,
+      "duplicates_mean": 0.8576,
+      "duplicates_min": 0.5204,
+      "non_duplicates_max": 0.9374,
+      "hard_negative_max": 0.9374,
+      "separation": -0.0799,
+      "safe_operating_point": {
+        "threshold": 0.94,
+        "recall": 0.1138,
+        "false_hits": 0,
+        "hard_negative_hits": 0
+      },
+      "under_1pct_false_positives": {
+        "threshold": 0.93,
+        "recall": 0.1707,
+        "false_hits": 1,
+        "hard_negative_hits": 1
+      }
+    },
+    {
+      "model": "snowflake/snowflake-arctic-embed-s",
+      "dim": 384,
+      "embed_ms_per_call": 3.19,
+      "embed_seconds_for_corpus": 9.82,
+      "duplicates_mean": 0.9254,
+      "duplicates_min": 0.7097,
+      "non_duplicates_max": 0.9722,
+      "hard_negative_max": 0.9722,
+      "separation": -0.0467,
+      "safe_operating_point": {
+        "threshold": 0.98,
+        "recall": 0.1138,
+        "false_hits": 0,
+        "hard_negative_hits": 0
+      },
+      "under_1pct_false_positives": {
+        "threshold": 0.98,
+        "recall": 0.1138,
+        "false_hits": 0,
+        "hard_negative_hits": 0
+      }
+    },
+    {
+      "model": "BAAI/bge-small-en-v1.5",
+      "dim": 384,
+      "embed_ms_per_call": 3.81,
+      "embed_seconds_for_corpus": 0.89,
+      "duplicates_mean": 0.871,
+      "duplicates_min": 0.5499,
+      "non_duplicates_max": 0.9523,
+      "hard_negative_max": 0.9523,
+      "separation": -0.0813,
+      "safe_operating_point": {
+        "threshold": 0.96,
+        "recall": 0.0813,
+        "false_hits": 0,
+        "hard_negative_hits": 0
+      },
+      "under_1pct_false_positives": {
+        "threshold": 0.93,
+        "recall": 0.2602,
+        "false_hits": 1,
+        "hard_negative_hits": 1
+      }
+    }
+  ]
+}

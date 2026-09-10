@@ -1,0 +1,25 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# project
+.env
+# results/ is committed: it is the evidence behind the README numbers.
+results/load_test_records.json
+*.log
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+coverage.xml
+.coverage
+.scratch/
+
+# build artefacts
+dist/

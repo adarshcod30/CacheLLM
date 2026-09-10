@@ -1,0 +1,394 @@
+{
+  "embedding_model": "BAAI/bge-small-en-v1.5",
+  "pairs": 193,
+  "duplicates": 123,
+  "non_duplicates": 70,
+  "similarity": {
+    "duplicates_mean": 0.871,
+    "duplicates_min": 0.5499,
+    "non_duplicates_mean": 0.6385,
+    "non_duplicates_max": 0.9523
+  },
+  "riskiest_non_duplicates": [
+    {
+      "a": "How do I undo the last git commit?",
+      "b": "How do I undo the last git merge?",
+      "kind": "hard_negative",
+      "similarity": 0.9523
+    },
+    {
+      "a": "Is this spam: congratulations you have won a free prize",
+      "b": "Is this phishing: congratulations you have won a free prize",
+      "kind": "hard_negative",
+      "similarity": 0.9231
+    },
+    {
+      "a": "What is the difference between INNER JOIN and LEFT JOIN?",
+      "b": "What is the difference between LEFT JOIN and RIGHT JOIN?",
+      "kind": "hard_negative",
+      "similarity": 0.92
+    },
+    {
+      "a": "How do I see logs for a Kubernetes pod?",
+      "b": "How do I see events for a Kubernetes pod?",
+      "kind": "hard_negative",
+      "similarity": 0.8959
+    },
+    {
+      "a": "How do I enable logging in Django?",
+      "b": "How do I disable logging in Django?",
+      "kind": "hard_negative",
+      "similarity": 0.8938
+    },
+    {
+      "a": "How do I find which process is using a port on Linux?",
+      "b": "How do I find which process is using a file on Linux?",
+      "kind": "hard_negative",
+      "similarity": 0.8933
+    },
+    {
+      "a": "How do I reverse a list in Python?",
+      "b": "How do I reverse a string in Python?",
+      "kind": "hard_negative",
+      "similarity": 0.891
+    },
+    {
+      "a": "Why do database indexes make queries faster?",
+      "b": "Why do database indexes make writes slower?",
+      "kind": "hard_negative",
+      "similarity": 0.8904
+    },
+    {
+      "a": "How do I merge two dictionaries in Python?",
+      "b": "How do I merge two lists in Python?",
+      "kind": "hard_negative",
+      "similarity": 0.869
+    },
+    {
+      "a": "What is the difference between Docker and a VM?",
+      "b": "What is the difference between Docker and Podman?",
+      "kind": "hard_negative",
+      "similarity": 0.8533
+    }
+  ],
+  "hardest_duplicates": [
+    {
+      "a": "What is retrieval augmented generation?",
+      "b": "Explain RAG",
+      "similarity": 0.5499
+    },
+    {
+      "a": "What is retrieval augmented generation?",
+      "b": "what does RAG mean in AI",
+      "similarity": 0.572
+    },
+    {
+      "a": "Explain the global interpreter lock",
+      "b": "what does the python GIL do",
+      "similarity": 0.5769
+    },
+    {
+      "a": "What is CORS?",
+      "b": "Explain cross origin resource sharing",
+      "similarity": 0.5786
+    },
+    {
+      "a": "What is the GIL in Python?",
+      "b": "Explain the global interpreter lock",
+      "similarity": 0.5789
+    },
+    {
+      "a": "Explain cross origin resource sharing",
+      "b": "what does cors do",
+      "similarity": 0.6087
+    },
+    {
+      "a": "python virtual environment setup",
+      "b": "How to make a venv in Python?",
+      "similarity": 0.6834
+    },
+    {
+      "a": "What is a JWT?",
+      "b": "Explain JSON web tokens",
+      "similarity": 0.6837
+    },
+    {
+      "a": "what is using port 8080 linux",
+      "b": "How to check the process on a given port?",
+      "similarity": 0.7046
+    },
+    {
+      "a": "Explain ACID properties",
+      "b": "what are acid guarantees in a database",
+      "similarity": 0.7216
+    }
+  ],
+  "sweep": [
+    {
+      "threshold": 0.7,
+      "would_hit": 144,
+      "hit_rate": 0.7461,
+      "true_hits": 115,
+      "false_hits": 29,
+      "missed_duplicates": 8,
+      "precision": 0.7986,
+      "recall": 0.935,
+      "f1": 0.8614,
+      "false_positive_rate": 0.4143,
+      "hard_negative_hits": 29,
+      "hard_negative_rate": 0.8286
+    },
+    {
+      "threshold": 0.72,
+      "would_hit": 141,
+      "hit_rate": 0.7306,
+      "true_hits": 114,
+      "false_hits": 27,
+      "missed_duplicates": 9,
+      "precision": 0.8085,
+      "recall": 0.9268,
+      "f1": 0.8636,
+      "false_positive_rate": 0.3857,
+      "hard_negative_hits": 27,
+      "hard_negative_rate": 0.7714
+    },
+    {
+      "threshold": 0.74,
+      "would_hit": 136,
+      "hit_rate": 0.7047,
+      "true_hits": 111,
+      "false_hits": 25,
+      "missed_duplicates": 12,
+      "precision": 0.8162,
+      "recall": 0.9024,
+      "f1": 0.8571,
+      "false_positive_rate": 0.3571,
+      "hard_negative_hits": 25,
+      "hard_negative_rate": 0.7143
+    },
+    {
+      "threshold": 0.76,
+      "would_hit": 131,
+      "hit_rate": 0.6788,
+      "true_hits": 108,
+      "false_hits": 23,
+      "missed_duplicates": 15,
+      "precision": 0.8244,
+      "recall": 0.878,
+      "f1": 0.8504,
+      "false_positive_rate": 0.3286,
+      "hard_negative_hits": 23,
+      "hard_negative_rate": 0.6571
+    },
+    {
+      "threshold": 0.78,
+      "would_hit": 127,
+      "hit_rate": 0.658,
+      "true_hits": 107,
+      "false_hits": 20,
+      "missed_duplicates": 16,
+      "precision": 0.8425,
+      "recall": 0.8699,
+      "f1": 0.856,
+      "false_positive_rate": 0.2857,
+      "hard_negative_hits": 20,
+      "hard_negative_rate": 0.5714
+    },
+    {
+      "threshold": 0.8,
+      "would_hit": 126,
+      "hit_rate": 0.6528,
+      "true_hits": 106,
+      "false_hits": 20,
+      "missed_duplicates": 17,
+      "precision": 0.8413,
+      "recall": 0.8618,
+      "f1": 0.8514,
+      "false_positive_rate": 0.2857,
+      "hard_negative_hits": 20,
+      "hard_negative_rate": 0.5714
+    },
+    {
+      "threshold": 0.82,
+      "would_hit": 116,
+      "hit_rate": 0.601,
+      "true_hits": 100,
+      "false_hits": 16,
+      "missed_duplicates": 23,
+      "precision": 0.8621,
+      "recall": 0.813,
+      "f1": 0.8368,
+      "false_positive_rate": 0.2286,
+      "hard_negative_hits": 16,
+      "hard_negative_rate": 0.4571
+    },
+    {
+      "threshold": 0.84,
+      "would_hit": 107,
+      "hit_rate": 0.5544,
+      "true_hits": 93,
+      "false_hits": 14,
+      "missed_duplicates": 30,
+      "precision": 0.8692,
+      "recall": 0.7561,
+      "f1": 0.8087,
+      "false_positive_rate": 0.2,
+      "hard_negative_hits": 14,
+      "hard_negative_rate": 0.4
+    },
+    {
+      "threshold": 0.86,
+      "would_hit": 93,
+      "hit_rate": 0.4819,
+      "true_hits": 84,
+      "false_hits": 9,
+      "missed_duplicates": 39,
+      "precision": 0.9032,
+      "recall": 0.6829,
+      "f1": 0.7778,
+      "false_positive_rate": 0.1286,
+      "hard_negative_hits": 9,
+      "hard_negative_rate": 0.2571
+    },
+    {
+      "threshold": 0.88,
+      "would_hit": 78,
+      "hit_rate": 0.4041,
+      "true_hits": 70,
+      "false_hits": 8,
+      "missed_duplicates": 53,
+      "precision": 0.8974,
+      "recall": 0.5691,
+      "f1": 0.6965,
+      "false_positive_rate": 0.1143,
+      "hard_negative_hits": 8,
+      "hard_negative_rate": 0.2286
+    },
+    {
+      "threshold": 0.9,
+      "would_hit": 62,
+      "hit_rate": 0.3212,
+      "true_hits": 59,
+      "false_hits": 3,
+      "missed_duplicates": 64,
+      "precision": 0.9516,
+      "recall": 0.4797,
+      "f1": 0.6378,
+      "false_positive_rate": 0.0429,
+      "hard_negative_hits": 3,
+      "hard_negative_rate": 0.0857
+    },
+    {
+      "threshold": 0.92,
+      "would_hit": 46,
+      "hit_rate": 0.2383,
+      "true_hits": 44,
+      "false_hits": 2,
+      "missed_duplicates": 79,
+      "precision": 0.9565,
+      "recall": 0.3577,
+      "f1": 0.5207,
+      "false_positive_rate": 0.0286,
+      "hard_negative_hits": 2,
+      "hard_negative_rate": 0.0571
+    },
+    {
+      "threshold": 0.94,
+      "would_hit": 25,
+      "hit_rate": 0.1295,
+      "true_hits": 24,
+      "false_hits": 1,
+      "missed_duplicates": 99,
+      "precision": 0.96,
+      "recall": 0.1951,
+      "f1": 0.3243,
+      "false_positive_rate": 0.0143,
+      "hard_negative_hits": 1,
+      "hard_negative_rate": 0.0286
+    },
+    {
+      "threshold": 0.96,
+      "would_hit": 10,
+      "hit_rate": 0.0518,
+      "true_hits": 10,
+      "false_hits": 0,
+      "missed_duplicates": 113,
+      "precision": 1.0,
+      "recall": 0.0813,
+      "f1": 0.1504,
+      "false_positive_rate": 0.0,
+      "hard_negative_hits": 0,
+      "hard_negative_rate": 0.0
+    },
+    {
+      "threshold": 0.98,
+      "would_hit": 1,
+      "hit_rate": 0.0052,
+      "true_hits": 1,
+      "false_hits": 0,
+      "missed_duplicates": 122,
+      "precision": 1.0,
+      "recall": 0.0081,
+      "f1": 0.0161,
+      "false_positive_rate": 0.0,
+      "hard_negative_hits": 0,
+      "hard_negative_rate": 0.0
+    },
+    {
+      "threshold": 1.0,
+      "would_hit": 0,
+      "hit_rate": 0.0,
+      "true_hits": 0,
+      "false_hits": 0,
+      "missed_duplicates": 123,
+      "precision": 1.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "false_positive_rate": 0.0,
+      "hard_negative_hits": 0,
+      "hard_negative_rate": 0.0
+    }
+  ],
+  "best_f1": {
+    "threshold": 0.72,
+    "would_hit": 141,
+    "hit_rate": 0.7306,
+    "true_hits": 114,
+    "false_hits": 27,
+    "missed_duplicates": 9,
+    "precision": 0.8085,
+    "recall": 0.9268,
+    "f1": 0.8636,
+    "false_positive_rate": 0.3857,
+    "hard_negative_hits": 27,
+    "hard_negative_rate": 0.7714
+  },
+  "lowest_threshold_with_zero_false_hits": {
+    "threshold": 0.96,
+    "would_hit": 10,
+    "hit_rate": 0.0518,
+    "true_hits": 10,
+    "false_hits": 0,
+    "missed_duplicates": 113,
+    "precision": 1.0,
+    "recall": 0.0813,
+    "f1": 0.1504,
+    "false_positive_rate": 0.0,
+    "hard_negative_hits": 0,
+    "hard_negative_rate": 0.0
+  },
+  "lowest_threshold_under_1pct_false_positives": {
+    "threshold": 0.96,
+    "would_hit": 10,
+    "hit_rate": 0.0518,
+    "true_hits": 10,
+    "false_hits": 0,
+    "missed_duplicates": 113,
+    "precision": 1.0,
+    "recall": 0.0813,
+    "f1": 0.1504,
+    "false_positive_rate": 0.0,
+    "hard_negative_hits": 0,
+    "hard_negative_rate": 0.0
+  }
+}

@@ -1,0 +1,77 @@
+# The whole stack: proxy, cache, metrics, dashboards.
+#   docker compose up --build
+#   open http://localhost:3000   (Grafana, dashboard pre-loaded, no login)
+#   open http://localhost:8080/docs
+name: cachellm
+
+services:
+  cachellm:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      CACHELLM_REDIS_URL: redis://redis:6379/0
+      CACHELLM_DEFAULT_PROVIDER: ${CACHELLM_DEFAULT_PROVIDER:-fake}
+      CACHELLM_EMBEDDING_MODEL: sentence-transformers/all-MiniLM-L6-v2
+      CACHELLM_LOG_LEVEL: ${CACHELLM_LOG_LEVEL:-INFO}
+      CACHELLM_API_KEYS: ${CACHELLM_API_KEYS:-}
+      CACHELLM_SHADOW_MODE: ${CACHELLM_SHADOW_MODE:-false}
+      CACHELLM_FAKE_LATENCY_MS: ${CACHELLM_FAKE_LATENCY_MS:-600}
+      # Bedrock: mount ~/.aws or pass keys through the environment.
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis:
+    # Redis 8 ships the query engine and vector search in the base image.
+    image: redis:8-alpine
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--save", "60", "1", "--maxmemory", "512mb",
+              "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    depends_on:
+      - cachellm
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_USERS_DEFAULT_THEME: light
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  redis-data:
+  prometheus-data:
+  grafana-data:
