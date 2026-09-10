@@ -44,6 +44,10 @@ class ReplayConfig:
     base_url: str = "http://127.0.0.1:8080"
     model: str = "fake/echo"
     api_key: str = ""
+    #: Optional system prompt sent with every request. Real applications almost
+    #: always have one, and it also keeps verbose models from running into
+    #: max_tokens, which would leave their answers uncacheable.
+    system: str = ""
     concurrency: int = 8
     requests: int = 2000
     seed: int = 42
@@ -76,10 +80,14 @@ def percentiles(values: list[float]) -> dict[str, float]:
 async def send_one(
     client: httpx.AsyncClient, config: ReplayConfig, index: int, item: WorkloadItem
 ) -> Record:
+    messages: list[dict[str, str]] = []
+    if config.system:
+        messages.append({"role": "system", "content": config.system})
+    messages.append({"role": "user", "content": item.prompt})
     payload: dict[str, Any] = {
         "model": config.model,
         "temperature": 0,
-        "messages": [{"role": "user", "content": item.prompt}],
+        "messages": messages,
     }
     if config.max_tokens:
         payload["max_tokens"] = config.max_tokens
@@ -199,6 +207,8 @@ def analyse(
             "errors": len(errors),
             "model": config.model,
             "concurrency": config.concurrency,
+            "max_tokens": config.max_tokens,
+            "system_prompt": config.system or None,
             **records_meta,
         },
         "workload": workload,
@@ -219,6 +229,7 @@ def analyse(
         "by_request_kind": by_kind,
         "hit_rate_curve": hit_rate_curve(ok),
         "server_stats": stats or {},
+        "diagnostics": (stats or {}).get("diagnostics", []),
         "errors_sample": [asdict(r) for r in errors[:5]],
     }
 
@@ -256,6 +267,9 @@ def to_markdown(report: dict[str, Any]) -> str:
     ]
     if lat.get("p95_speedup_factor"):
         lines.append(f"| p95 speedup | {lat['p95_speedup_factor']}x | | |")
+    notes = report.get("diagnostics") or []
+    if notes:
+        lines += ["", "**Diagnostics**", ""] + [f"- {note}" for note in notes]
     if total:
         lines += [
             "",
@@ -289,6 +303,7 @@ async def main() -> None:
     parser.add_argument("--concurrency", type=int, default=8)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max-tokens", type=int, default=None)
+    parser.add_argument("--system", default="", help="System prompt sent with every request.")
     parser.add_argument("--unseen-ratio", type=float, default=0.18)
     parser.add_argument("--exact-repeat-ratio", type=float, default=0.40)
     parser.add_argument("--reset", action="store_true", help="Flush the cache before starting.")
@@ -303,6 +318,7 @@ async def main() -> None:
         requests=args.requests,
         seed=args.seed,
         max_tokens=args.max_tokens,
+        system=args.system,
         out_dir=args.out_dir,
     )
     workload_config = WorkloadConfig(

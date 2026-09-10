@@ -137,59 +137,111 @@ from 79.1% to 77.2%. The lower number is the honest one.
 The lesson generalises: when a benchmark surprises you in your favour, the bug
 is usually in the benchmark.
 
+## Finding 5: a safety rule can quietly destroy the hit rate
+
+The first run against real Bedrock returned an **8.9% hit rate**. Only 11 entries
+had been stored, from 1,822 misses.
+
+The cause was a rule working exactly as designed. CacheLLM refuses to store a
+response whose finish reason is `length`, because a truncated answer served
+from cache forever is a silent quality bug. The benchmark had been run with
+`max_tokens=120`. Nova Micro is verbose, so almost every answer hit that cap,
+came back truncated, and was correctly refused.
+
+Correct behaviour, invisible failure. Nothing in the output said why the cache
+was empty. That is the worst kind of bug in infrastructure: the system is doing
+the right thing and the operator has no way to know it.
+
+The fix was not to relax the rule. It was to make it speak:
+
+* every refused store is counted by reason;
+* `GET /admin/stats` returns a `diagnostics` list in plain English;
+* the benchmark prints those diagnostics with its results;
+* `CACHELLM_CACHE_TRUNCATED=true` exists for teams who cap tokens deliberately.
+
+The next run said so directly:
+
+> 79% of misses were not cached because the response hit max_tokens. Raise
+> max_tokens so answers finish, or set CACHELLM_CACHE_TRUNCATED=true to cache
+> truncated answers anyway.
+
+Raising the cap and adding a short system prompt took the hit rate from 8.9% to
+77.0%. The same diagnostics now flag two other quiet failures: more than half of
+traffic bypassing the cache, and running an embedding model with no measured
+threshold.
+
 ## Load test
 
-2,000 requests, concurrency 8, against a warm proxy on an Apple M4.
+Two runs of the same 2,000-request workload at concurrency 8, from a laptop in
+India. One against Amazon Nova Micro on AWS Bedrock, one against the built-in
+fake provider so the benchmark reproduces with no cloud account.
 
 Workload: 483 unique prompts, 4.1x repeat factor, deliberately skewed so a few
 questions dominate, with an 18% long tail of genuinely new questions.
 
-| Metric | Value |
-| --- | ---: |
-| Hit rate | **77.2%** |
-| Workload ceiling | 79.6% |
-| Exact-tier hits | 1,347 |
-| Semantic-tier hits | 198 |
-| Errors | 0 |
-| Throughput | 55.6 req/s |
+| Metric | Bedrock (Nova Micro) | Fake provider |
+| --- | ---: | ---: |
+| Hit rate | **77.0%** | 77.2% |
+| Workload ceiling | 79.6% | 79.6% |
+| Exact-tier hits | 1,265 | 1,347 |
+| Semantic-tier hits | 275 | 198 |
+| Entries stored | 451 | 451 |
+| Throughput | 41.9 req/s | 55.6 req/s |
+| Errors | 0 | 0 |
+| Real spend | **$0.0038** | $0 |
+
+The two agree within half a point, which is the useful part: the cache's
+behaviour is a property of the workload and the embedding model, not of which
+model sits behind it.
+
+Against Bedrock, broken down by what each request actually was:
 
 | Request kind | Count | Hit rate | |
 | --- | ---: | ---: | --- |
-| Exact repeat | 584 | 99.7% | as designed |
-| Reworded repeat | 1,008 | 95.5% | the semantic tier earning its place |
+| Exact repeat | 584 | 99.3% | as designed |
+| Reworded repeat | 1,008 | 95.2% | the semantic tier earning its place |
 | First sight | 40 | 0.0% | correct, nothing to hit |
 | Genuinely new | 368 | **0.0%** | **zero false positives** |
 
 | Latency (ms) | p50 | p95 | p99 |
 | --- | ---: | ---: | ---: |
-| Cache hit | 4.1 | 8.3 | 15.3 |
-| Cache miss | 613.2 | 630.7 | 644.3 |
+| Cache hit | 2.6 | **5.7** | 10.2 |
+| Cache miss | 797.0 | 1,022.8 | 1,351.8 |
 
-p95 speedup: **75.6x**. Modelled cost reduction: **73.9%**. Hit rate warmed
-from 49% in the first 100 requests to 87% in the last 100.
+p95 speedup: **178.8x**. Cost reduction: **78.0%**. Hit rate warmed from 44% in
+the first 100 requests to 87% in the last 100. Semantic hits scored a median
+0.95 similarity, well clear of the 0.89 threshold.
 
-**Read the latency honestly.** Cache-miss latency here is a 600 ms simulated
-upstream, because AWS credentials were not available on the machine that
-produced this run. The hit-side numbers are real measurements of real work:
-embedding, vector search, Redis round trip, serialisation. The miss side is a
-stand-in, and the speedup ratio inherits that. To produce the number for your
-own deployment, point it at a real provider:
+Reproduce either run:
 
 ```bash
-CACHELLM_DEFAULT_PROVIDER=bedrock make serve
-uv run python -m bench.replay --model bedrock/us.amazon.nova-micro-v1:0 --reset
+# real provider, costs about half a cent
+CACHELLM_DEFAULT_PROVIDER=bedrock AWS_REGION=us-east-1 make serve
+uv run python -m bench.replay --model bedrock/us.amazon.nova-micro-v1:0 \
+  --max-tokens 512 --system "Answer concisely in at most three sentences." --reset
+
+# no cloud account needed
+CACHELLM_DEFAULT_PROVIDER=fake CACHELLM_FAKE_LATENCY_MS=600 make serve
+uv run python -m bench.replay --reset
 ```
+
+The system prompt is not a trick to flatter the number. It keeps a verbose model
+from running into `max_tokens`, which would leave its answers uncacheable, and
+almost every production application has one anyway.
 
 ## What this means for a deployment
 
-1. **The exact tier does the heavy lifting.** 87% of hits came from exact
-   matching, which is free, sub-millisecond and cannot be semantically wrong.
-   Any semantic cache without an exact tier in front of it is leaving the
-   safest wins on the table.
-2. **The semantic tier is a bonus, not the foundation.** It added 198 hits,
-   about 10 points of hit rate, at a real risk that has to be measured.
-3. **Start in shadow mode.** Log what the cache would have served for a week,
+1. **The exact tier does the heavy lifting.** 82% of hits came from exact
+   matching, which is free, costs about 2.6 ms and cannot be semantically
+   wrong. Any semantic cache without an exact tier in front of it is leaving
+   the safest wins on the table.
+2. **The semantic tier is a bonus, not the foundation.** It added 275 hits,
+   close to 14 points of hit rate, at a real risk that has to be measured.
+3. **Instrument the reasons you refuse to cache.** The 8.9% run above was a
+   correct safety rule with no voice. Counting refusals by reason turned a
+   day of confusion into one line of output.
+4. **Start in shadow mode.** Log what the cache would have served for a week,
    read the near-miss log, then switch it on.
-4. **Re-run the sweep on your own traffic.** These numbers describe this
+5. **Re-run the sweep on your own traffic.** These numbers describe this
    corpus. Yours will differ, and `/admin/threshold-sweep` takes your own
    labelled pairs.

@@ -98,6 +98,10 @@ class Settings(BaseSettings):
     #: calls the provider. The safe way to roll out onto real traffic.
     shadow_mode: bool = False
     cache_streaming: bool = True
+    #: Store responses that stopped because they hit max_tokens. Off by default:
+    #: a truncated answer served from cache forever is a silent quality bug. Turn
+    #: it on if you cap max_tokens deliberately and want those answers cached.
+    cache_truncated: bool = False
     top_k: int = 3
     #: A miss within this margin of the threshold is recorded as a near miss.
     near_miss_margin: float = 0.06

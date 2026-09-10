@@ -1,0 +1,222 @@
+{
+  "run": {
+    "requests": 2000,
+    "successful": 2000,
+    "errors": 0,
+    "model": "bedrock/us.amazon.nova-micro-v1:0",
+    "concurrency": 8,
+    "max_tokens": 512,
+    "system_prompt": "Answer concisely in at most three sentences.",
+    "wall_seconds": 47.73,
+    "throughput_rps": 41.9
+  },
+  "workload": {
+    "config": {
+      "requests": 2000,
+      "seed": 42,
+      "unseen_ratio": 0.18,
+      "exact_repeat_ratio": 0.4,
+      "zipf_a": 1.1
+    },
+    "requests": 2000,
+    "unique_prompts": 483,
+    "repeat_factor": 4.14,
+    "mix": {
+      "first_sight": 40,
+      "paraphrase": 1008,
+      "exact_repeat": 584,
+      "unseen": 368
+    },
+    "theoretical_max_hit_rate": 0.796
+  },
+  "outcomes": {
+    "hits": 1540,
+    "misses": 460,
+    "bypassed": 0,
+    "hit_rate": 0.77,
+    "hit_rate_of_cacheable": 0.77,
+    "exact_hits": 1265,
+    "semantic_hits": 275,
+    "semantic_share_of_hits": 0.1786
+  },
+  "latency_ms": {
+    "hit": {
+      "count": 1540,
+      "mean": 3.1,
+      "p50": 2.62,
+      "p95": 5.72,
+      "p99": 10.17,
+      "min": 1.45,
+      "max": 25.11
+    },
+    "miss": {
+      "count": 460,
+      "mean": 812.61,
+      "p50": 797.02,
+      "p95": 1022.83,
+      "p99": 1351.76,
+      "min": 28.25,
+      "max": 1607.77
+    },
+    "p95_speedup_factor": 178.8
+  },
+  "similarity_of_semantic_hits": {
+    "count": 275,
+    "mean": 0.93,
+    "p50": 0.95,
+    "p95": 0.98,
+    "p99": 0.98,
+    "min": 0.88,
+    "max": 0.99
+  },
+  "by_request_kind": {
+    "first_sight": {
+      "HIT": 0,
+      "MISS": 40,
+      "BYPASS": 0
+    },
+    "paraphrase": {
+      "HIT": 960,
+      "MISS": 48,
+      "BYPASS": 0
+    },
+    "exact_repeat": {
+      "HIT": 580,
+      "MISS": 4,
+      "BYPASS": 0
+    },
+    "unseen": {
+      "HIT": 0,
+      "MISS": 368,
+      "BYPASS": 0
+    }
+  },
+  "hit_rate_curve": [
+    {
+      "through_request": 100,
+      "hit_rate": 0.44
+    },
+    {
+      "through_request": 200,
+      "hit_rate": 0.7
+    },
+    {
+      "through_request": 300,
+      "hit_rate": 0.7
+    },
+    {
+      "through_request": 400,
+      "hit_rate": 0.77
+    },
+    {
+      "through_request": 500,
+      "hit_rate": 0.73
+    },
+    {
+      "through_request": 600,
+      "hit_rate": 0.78
+    },
+    {
+      "through_request": 700,
+      "hit_rate": 0.77
+    },
+    {
+      "through_request": 800,
+      "hit_rate": 0.84
+    },
+    {
+      "through_request": 900,
+      "hit_rate": 0.74
+    },
+    {
+      "through_request": 1000,
+      "hit_rate": 0.76
+    },
+    {
+      "through_request": 1100,
+      "hit_rate": 0.84
+    },
+    {
+      "through_request": 1200,
+      "hit_rate": 0.84
+    },
+    {
+      "through_request": 1300,
+      "hit_rate": 0.87
+    },
+    {
+      "through_request": 1400,
+      "hit_rate": 0.74
+    },
+    {
+      "through_request": 1500,
+      "hit_rate": 0.8
+    },
+    {
+      "through_request": 1600,
+      "hit_rate": 0.85
+    },
+    {
+      "through_request": 1700,
+      "hit_rate": 0.76
+    },
+    {
+      "through_request": 1800,
+      "hit_rate": 0.75
+    },
+    {
+      "through_request": 1900,
+      "hit_rate": 0.85
+    },
+    {
+      "through_request": 2000,
+      "hit_rate": 0.87
+    }
+  ],
+  "server_stats": {
+    "entries": 451,
+    "requests": 2000,
+    "cacheable_requests": 2000,
+    "hits": 1540,
+    "hits_exact": 1265,
+    "hits_semantic": 275,
+    "misses": 460,
+    "bypassed": 0,
+    "shadow_hits": 0,
+    "near_misses": 17,
+    "coalesced": 9,
+    "errors": 0,
+    "hit_rate": 0.77,
+    "hit_rate_of_cacheable": 0.77,
+    "stores_skipped_truncated": 0,
+    "stores_skipped_empty": 0,
+    "diagnostics": [],
+    "usd_saved": 0.013492,
+    "usd_spent": 0.003796,
+    "tokens_saved": 116029,
+    "latency_ms": {
+      "hit": {
+        "count": 4100,
+        "p50": 1.4,
+        "p95": 3.92,
+        "p99": 11.13,
+        "min": 0.56,
+        "max": 27.09
+      },
+      "miss": {
+        "count": 3903,
+        "p50": 1048.93,
+        "p95": 2598.36,
+        "p99": 2916.57,
+        "min": 5.34,
+        "max": 4298.19
+      }
+    },
+    "cache_available": true,
+    "caching_enabled": true,
+    "shadow_mode": false,
+    "in_flight": 0
+  },
+  "diagnostics": [],
+  "errors_sample": []
+}

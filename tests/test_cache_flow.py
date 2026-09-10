@@ -127,6 +127,43 @@ async def test_truncated_responses_are_not_stored(state) -> None:
     assert await state.vectors.count() == 0
 
 
+async def test_truncation_skips_are_counted_and_explained(state) -> None:
+    """A low hit rate caused by max_tokens must be diagnosable, not mysterious."""
+    for i in range(5):
+        request = make_request(f"question number {i}")
+        lookup = await state.cache.lookup(request, "fake")
+        await state.cache.store(
+            lookup=lookup,
+            request=request,
+            provider_name="fake",
+            response_text="a truncated ans",
+            prompt_tokens=5,
+            completion_tokens=120,
+            finish_reason="length",
+        )
+        await state.analytics.incr("misses")
+    stats = await state.cache.stats()
+    assert stats["stores_skipped_truncated"] == 5
+    assert any("max_tokens" in note for note in stats["diagnostics"])
+
+
+async def test_truncated_responses_can_be_cached_on_purpose(state) -> None:
+    state.settings.cache_truncated = True
+    request = make_request("what is python")
+    lookup = await state.cache.lookup(request, "fake")
+    entry_id = await state.cache.store(
+        lookup=lookup,
+        request=request,
+        provider_name="fake",
+        response_text="half an ans",
+        prompt_tokens=5,
+        completion_tokens=5,
+        finish_reason="length",
+    )
+    assert entry_id is not None
+    assert await state.vectors.count() == 1
+
+
 async def test_empty_responses_are_not_stored(state) -> None:
     request = make_request("what is python")
     lookup = await state.cache.lookup(request, "fake")

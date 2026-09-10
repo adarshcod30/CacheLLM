@@ -60,6 +60,9 @@ datasets = [
     "datasets>=5.0.1",
     "pandas>=3.0.5",
 ]
+aws = [
+    "botocore[crt]>=1.43.91",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.23,<0.12.0"]

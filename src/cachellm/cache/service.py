@@ -187,10 +187,18 @@ class CacheService:
         """Persist a completed answer. Only clean, finished responses are stored."""
         if not lookup.decision.cacheable or lookup.status == "bypass":
             return None
-        if finish_reason not in ("stop", "end_turn", "eos", "stop_sequence", "complete"):
+
+        complete = finish_reason in ("stop", "end_turn", "eos", "stop_sequence", "complete")
+        if not complete and not self.settings.cache_truncated:
+            # The most common cause of a mysteriously low hit rate: max_tokens is
+            # set below what the model wants to say, every answer comes back
+            # truncated, and nothing is cacheable. Counted so /admin/stats can
+            # say so out loud instead of leaving it to be guessed at.
+            await self.analytics.incr("stores_skipped_truncated")
             log.debug("skip_store_incomplete", finish_reason=finish_reason)
             return None
         if not response_text.strip():
+            await self.analytics.incr("stores_skipped_empty")
             return None
 
         vector = lookup.embedding
@@ -266,6 +274,27 @@ class CacheService:
         requests = counters.get("requests", 0.0)
         hits = counters.get("hits", 0.0)
         cacheable = counters.get("cacheable_requests", 0.0)
+        misses = counters.get("misses", 0.0)
+        skipped_truncated = counters.get("stores_skipped_truncated", 0.0)
+        diagnostics: list[str] = []
+        if misses and skipped_truncated / misses > 0.2:
+            diagnostics.append(
+                f"{skipped_truncated / misses:.0%} of misses were not cached because the "
+                f"response hit max_tokens. Raise max_tokens so answers finish, or set "
+                f"CACHELLM_CACHE_TRUNCATED=true to cache truncated answers anyway."
+            )
+        if requests and counters.get("bypass", 0.0) / requests > 0.5:
+            diagnostics.append(
+                "Over half of requests bypassed the cache. Check X-Cache-Bypass-Reason: "
+                "temperature, tool calls, JSON mode and multi-turn are skipped by default."
+            )
+        if not self.settings.is_calibrated:
+            diagnostics.append(
+                f"No measured threshold for embedding model "
+                f"{self.settings.embedding_model!r}; using {self.settings.calibrated_threshold}. "
+                f"Run `python -m bench.compare_models` on your own pairs."
+            )
+
         return {
             "entries": await self.vectors.count(),
             "requests": int(requests),
@@ -281,6 +310,9 @@ class CacheService:
             "errors": int(counters.get("provider_errors", 0.0)),
             "hit_rate": round(hits / requests, 4) if requests else 0.0,
             "hit_rate_of_cacheable": round(hits / cacheable, 4) if cacheable else 0.0,
+            "stores_skipped_truncated": int(skipped_truncated),
+            "stores_skipped_empty": int(counters.get("stores_skipped_empty", 0.0)),
+            "diagnostics": diagnostics,
             "usd_saved": round(counters.get("usd_saved", 0.0), 6),
             "usd_spent": round(counters.get("usd_spent", 0.0), 6),
             "tokens_saved": int(

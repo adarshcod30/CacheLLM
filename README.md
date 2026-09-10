@@ -2,7 +2,7 @@
 
 **A drop-in semantic cache for OpenAI-compatible LLM APIs. Change one base URL, and questions your model has already answered come back in milliseconds instead of seconds.**
 
-On a 2,000-request replay it served **77.2% of traffic from cache** with **zero false positives** on genuinely new questions, cutting modelled spend by **73.9%** and p95 latency by **75x**.
+On a 2,000-request replay against **AWS Bedrock** it served **77% of traffic from cache** with **zero false positives** on genuinely new questions, cutting spend by **78%** and p95 latency from 1,023 ms to **5.7 ms**.
 
 [Quick start](#quick-start) · [How it works](#how-it-works) · [Evaluation](docs/evaluation.md) · [API reference](#api-reference) · [Deployment](#deployment-and-infrastructure)
 
@@ -28,27 +28,31 @@ Everything else stays the same: same request shape, same response shape, same er
 
 ## Headline results
 
-From a 2,000-request replay against a warm proxy on an Apple M4. Full method, caveats and reproduction steps in [docs/evaluation.md](docs/evaluation.md).
+2,000 requests at concurrency 8 against **Amazon Nova Micro on AWS Bedrock**, from a laptop in India. Full method, caveats and reproduction steps in [docs/evaluation.md](docs/evaluation.md).
 
 | Metric | Result |
 | --- | ---: |
-| Hit rate | **77.2%** (ceiling for this workload: 79.6%) |
+| Hit rate | **77.0%** (ceiling for this workload: 79.6%) |
 | False positives on genuinely new questions | **0 of 368** |
-| Reworded repeats served from cache | 95.5% |
-| p95 latency, cache hit | **8.3 ms** |
-| p95 latency, cache miss | 630.7 ms |
-| p95 speedup | **75.6x** |
-| Modelled cost reduction | **73.9%** |
+| Reworded repeats served from cache | 95.2% |
+| Exact repeats served from cache | 99.3% |
+| p95 latency, cache hit | **5.7 ms** |
+| p95 latency, cache miss | 1,022.8 ms |
+| p95 speedup | **178.8x** |
+| Cost reduction | **78.0%** |
+| Throughput | 41.9 req/s |
 | Errors | 0 |
 
-Cache-miss latency in that run is a 600 ms simulated upstream, so the speedup ratio inherits that assumption. Hit-side latency is real measured work. Point it at a real provider and re-run to get your own number, one command, described in the evaluation doc.
+Hit rate climbed from 44% in the first hundred requests to 87% in the last hundred as the cache warmed. The whole run cost **$0.0038** in real Bedrock charges, because 1,540 of the 2,000 requests never reached the model.
+
+The same benchmark runs without any cloud credentials against the built-in fake provider, and lands within half a point: 77.2% hit rate, again with zero false positives. That version is what CI asserts on every push.
 
 ## Key features
 
 | Feature | What it does | Why it exists |
 | --- | --- | --- |
 | **Drop-in OpenAI API** | Same request and response shape, streaming included, verified against the official `openai` Python SDK in CI | Adoption has to cost one line, or nobody adopts it |
-| **Two-tier cache** | Exact-match tier answers literal repeats in about a millisecond without embedding; semantic tier handles rewording | 87% of hits came from the exact tier: free, fast and impossible to get semantically wrong |
+| **Two-tier cache** | Exact-match tier answers literal repeats in about a millisecond without embedding; semantic tier handles rewording | 82% of hits came from the exact tier: free, fast and impossible to get semantically wrong |
 | **Per-model threshold calibration** | Ships measured safe thresholds for six embedding models and picks the right one automatically | Measured safe thresholds span 0.89 to 0.98. A threshold copied between models is a guess |
 | **Cacheability policy** | Classifies every prompt and decides cacheable, category, TTL | Creative writing, live data and personal questions must not be cached like a fact |
 | **Personal-data guard** | Refuses to store prompts containing emails, long digit runs, API keys or "my order" phrasing | Serving one user's answer to another is the failure that gets a cache torn out |
@@ -172,7 +176,7 @@ sequenceDiagram
 
 ### Why two tiers
 
-The exact tier costs one Redis `GET` and no embedding. In the load test it produced 1,347 of 1,545 hits: 87% of all cache hits, at about a millisecond each, with no possibility of a semantic mistake. The semantic tier added another 198 hits, roughly ten points of hit rate, and it is the tier that carries risk. Building the cheap safe tier first is the difference between a demo and something you would deploy.
+The exact tier costs one Redis `GET` and no embedding. Against Bedrock it produced 1,265 of 1,540 hits: 82% of all cache hits, at about 2.6 ms each, with no possibility of a semantic mistake. The semantic tier added another 275 hits, close to 14 points of hit rate, and it is the tier that carries risk. Building the cheap safe tier first is the difference between a demo and something you would deploy.
 
 ### What is deliberately not cached
 
@@ -276,6 +280,14 @@ AWS Bedrock needs no extra vendor keys and reaches Nova, Claude, Llama and Mistr
 ```bash
 CACHELLM_DEFAULT_PROVIDER=bedrock AWS_REGION=us-east-1 uv run cachellm serve
 ```
+
+If your credentials come from `aws login` rather than static keys or an SSO profile, install the CRT extra once, because that credential provider needs it:
+
+```bash
+uv sync --extra aws
+```
+
+The proxy detects that case and says so in the error rather than passing along boto's version of the message.
 
 ```bash
 curl -s http://localhost:8080/v1/chat/completions -H 'Content-Type: application/json' -d '{"model":"bedrock/us.amazon.nova-micro-v1:0","temperature":0,"messages":[{"role":"user","content":"What is Redis used for?"}]}'

@@ -51,6 +51,35 @@ BEDROCK_VENDOR_PREFIXES = (
 )
 
 
+def _explain(exc: Exception) -> str:
+    """Turn boto's less obvious failures into something actionable.
+
+    The credential one is worth special-casing: the AWS CLI's `aws login` flow
+    stores credentials through a provider that needs the optional CRT extra,
+    and boto's own message names the package without naming the install.
+    """
+    text = str(exc)
+    if "botocore[crt]" in text or "Missing Dependency" in text:
+        return (
+            "Bedrock call failed: your AWS credentials come from `aws login`, which needs "
+            "the optional CRT extra. Install it with `uv sync --extra aws` "
+            "(or `pip install 'botocore[crt]'`), then restart the proxy. "
+            "Static keys and SSO profiles do not need this."
+        )
+    if "ExpiredToken" in text or "security token included in the request is expired" in text:
+        return "Bedrock call failed: AWS credentials have expired. Run `aws login` again."
+    if "AccessDeniedException" in text:
+        return (
+            f"Bedrock call failed: access denied. Check the model is enabled in this region "
+            f"and the identity has bedrock:InvokeModel. Original: {text[:200]}"
+        )
+    if "ThrottlingException" in text or "TooManyRequests" in text:
+        return f"Bedrock call failed: throttled by AWS. Lower concurrency and retry. {text[:160]}"
+    if "ValidationException" in text:
+        return f"Bedrock rejected the request: {text[:280]}"
+    return f"Bedrock call failed: {text[:300]}"
+
+
 def looks_like_bedrock_model(model: str) -> bool:
     candidate = model.split("/", 1)[1] if model.startswith("bedrock/") else model
     for region in ("us.", "eu.", "apac.", "ap."):
@@ -144,7 +173,7 @@ class BedrockProvider(Provider):
             response = await asyncio.to_thread(lambda: self._get_client().converse(**kwargs))
         except Exception as exc:  # boto raises many distinct client errors
             log.warning("bedrock_error", model=model_id, error=str(exc)[:300])
-            raise UpstreamError(f"Bedrock call failed: {exc}") from exc
+            raise UpstreamError(_explain(exc)) from exc
 
         message = response.get("output", {}).get("message", {})
         text = "".join(
@@ -203,7 +232,7 @@ class BedrockProvider(Provider):
                     break
                 if isinstance(item, Exception):
                     log.warning("bedrock_stream_error", model=model_id, error=str(item)[:300])
-                    raise UpstreamError(f"Bedrock stream failed: {item}") from item
+                    raise UpstreamError(_explain(item)) from item
                 yield item
         finally:
             task.cancel()
