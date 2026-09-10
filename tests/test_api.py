@@ -143,6 +143,41 @@ def test_models_endpoint_lists_routable_models(client) -> None:
     assert any(m["id"].startswith("bedrock/") for m in body["data"])
 
 
+def test_admin_requests_is_the_log_the_cli_reads(client) -> None:
+    """`cachellm stats` reads this over HTTP.
+
+    It has to, because with the in-memory backend the cache lives inside the
+    serving process: a CLI that built its own state would report on an empty
+    cache of its own and always say there were no requests.
+    """
+    post(client)
+    post(client)
+    post(client, temperature=0.9)  # bypassed
+
+    body = client.get("/admin/requests?limit=10").json()
+    assert body["count"] == 3
+    rows = body["requests"]
+    assert rows[0]["at"] >= rows[-1]["at"], "newest first"
+
+    by_status = {r["status"] for r in rows}
+    assert {"MISS", "HIT", "BYPASS"} <= by_status
+
+    hit = next(r for r in rows if r["status"] == "HIT")
+    assert hit["tier"] == "exact"
+    assert hit["saved_usd"] > 0
+    assert hit["latency_ms"] > 0
+
+    bypassed = next(r for r in rows if r["status"] == "BYPASS")
+    assert bypassed["reason"] == "temperature_too_high"
+    assert bypassed["prompt"], "a blank prompt makes the row useless"
+
+
+def test_admin_requests_respects_the_limit(client) -> None:
+    for i in range(6):
+        post(client, messages=[{"role": "user", "content": f"question {i}"}])
+    assert client.get("/admin/requests?limit=3").json()["count"] == 3
+
+
 def test_admin_providers_lists_where_names_go(client) -> None:
     body = client.get("/admin/providers").json()
     assert body["default_provider"] in ("openai", "bedrock", "fake")

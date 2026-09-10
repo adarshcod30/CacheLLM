@@ -1,6 +1,6 @@
 [project]
 name = "cachellm-proxy"
-version = "0.2.0"
+version = "0.2.1"
 description = "A drop-in semantic cache for OpenAI-compatible LLM APIs: match requests by meaning, serve repeats instantly, cut spend."
 readme = "README.md"
 authors = [

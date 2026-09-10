@@ -212,6 +212,21 @@ async def invalidate(request: Request, body: InvalidateRequest) -> dict[str, Any
     }
 
 
+@router.get("/requests")
+async def requests_log(request: Request, limit: int = Query(50, ge=1, le=500)) -> dict[str, Any]:
+    """The recent request log: what the cache did with each one.
+
+    This is what `cachellm stats` reads. It has to come over HTTP because with
+    the in-memory backend the cache lives inside the serving process, and a CLI
+    building its own state would report on an empty cache of its own.
+    """
+    state = _require_cache(request)
+    if state.settings.require_auth_for_admin:
+        verify(request, state.settings.client_keys)
+    rows = await state.analytics.recent_requests(limit=limit)
+    return {"count": len(rows), "requests": rows}
+
+
 @router.get("/near-misses")
 async def near_misses(request: Request, limit: int = Query(50, ge=1, le=500)) -> dict[str, Any]:
     state = _require_cache(request)

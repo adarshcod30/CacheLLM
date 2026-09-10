@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.1
+
+Fixes `cachellm stats` and `cachellm watch`, which were the point of 0.2.0 and
+did not work with its own default backend.
+
+Both commands built their own application state, which meant starting a second
+process with a second, empty in-memory cache and reporting on that. Against a
+running proxy they always said "no requests yet". They now read the running
+proxy over HTTP, through a new `GET /admin/requests` endpoint, and say plainly
+what to do when nothing is answering.
+
+This only ever worked by accident with the redis backend, where the state
+happens to be shared. With the default in-memory backend the cache lives inside
+the serving process, so reading it has to go through the server.
+
+```bash
+cachellm stats                       # reads http://127.0.0.1:8080 by default
+cachellm stats --url http://host:80  # or wherever it runs
+```
+
 ## 0.2.0
 
 The release that made it installable. Three things stood between `pip install`
