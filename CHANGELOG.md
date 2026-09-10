@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.2.2
+
+Found by running the proxy against real Google Gemini and Groq for the first
+time, instead of against simulated servers. Both now pass every live check, and
+`bench/live_check.py` lets anyone repeat that with their own key.
+
+### Fixed
+
+- **Groq's main models work.** Groq names its two main chat models
+  `openai/gpt-oss-20b` and `openai/gpt-oss-120b`. The proxy read the `openai/`
+  as its own routing hint and removed it, so every request came back 404. The
+  prefix is now removed only when the upstream is OpenAI itself. OpenRouter and
+  Together ids such as `openai/gpt-4o` were broken the same way.
+- **A failed stream reports the failure.** A streaming request for an unknown
+  model returned HTTP 200 with an empty answer. The proxy now waits for the
+  upstream's first event, so the caller gets the host's real status code, and a
+  failure partway through ends the stream with the error event the OpenAI SDKs
+  raise.
+- **A `.env` file is respected.** Auto-detection only checked exported
+  variables, so a base URL written in `.env` was replaced by whichever vendor
+  key happened to be exported. `.env.example` now leaves the provider lines
+  commented out, so copying it keeps detection on.
+- **`CACHELLM_EMBEDDING_CACHE_SIZE=0` no longer turns caching off.** The
+  embedder read its results back out of its own cache, so a cache of 0, or a
+  batch bigger than the cache, failed. The admin threshold sweep could reach
+  the second case with a large enough list.
+- **Pricing picks the longest matching model name,** so a Flash-Lite preview
+  is no longer priced as the dearer Flash.
+
+### Clearer
+
+- **A Redis that answers but cannot hold the cache is named.** A server without
+  the search module, or a URL pointing at a database other than 0, now gets a
+  startup warning and a note at the top of `cachellm stats`, with the fix.
+  Before, it was one info-level line quoting a cryptic `FT.INFO` error. No
+  Redis at all stays quiet, because that is the normal default.
+- **The README explains how to get a working Redis:** Homebrew or the official
+  Docker image, database 0, and what happens when either is missing.
+- **Latency is reported apart for exact and reworded hits.** In the Bedrock
+  run, reworded hits took 9.7 ms at p95 and exact ones 4.9 ms. The single
+  5.7 ms figure blended the two. The model comparison's embed column timed
+  short synthetic strings and is now labelled that way, and the benchmark now
+  times real questions.
+- **Gemini and Groq models have real prices,** checked against their pricing
+  pages on 2026-09-11, so savings on those hosts no longer use a stand-in.
+- **Catalog examples come from each host's live model list.** All three Groq
+  examples and two of the three Gemini examples had been retired.
+- **A download-size claim is corrected.** As fastembed fetches them, MiniLM is
+  86 MB and bge-small 63 MB, so MiniLM is the larger of the two.
+
 ## 0.2.1
 
 Fixes `cachellm stats` and `cachellm watch`, which were the point of 0.2.0 and
