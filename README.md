@@ -1,5 +1,11 @@
 # CacheLLM
 
+[![CI](https://github.com/adarshcod30/CacheLLM/actions/workflows/ci.yml/badge.svg)](https://github.com/adarshcod30/CacheLLM/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-128%20passing-brightgreen)](tests/)
+[![Hit rate](https://img.shields.io/badge/hit%20rate-77%25%20on%20Bedrock-orange)](docs/evaluation.md)
+
 **A drop-in semantic cache for OpenAI-compatible LLM APIs. Change one base URL, and questions your model has already answered come back in milliseconds instead of seconds.**
 
 On a 2,000-request replay against **AWS Bedrock** it served **77% of traffic from cache** with **zero false positives** on genuinely new questions, cutting spend by **78%** and p95 latency from 1,023 ms to **5.7 ms**.
