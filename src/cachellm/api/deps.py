@@ -17,25 +17,32 @@ cache that takes an application down when it breaks is worse than no cache.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from fastapi import Request
 
-from cachellm.cache.analytics import Analytics
 from cachellm.cache.coalesce import SingleFlight
-from cachellm.cache.exact_store import ExactStore
 from cachellm.cache.memory import MemoryAnalytics, MemoryExactStore, MemoryVectorStore
-from cachellm.cache.redis_client import build_redis
 from cachellm.cache.service import CacheService
-from cachellm.cache.vector_store import VectorStore
 from cachellm.embeddings import build_embedder
 from cachellm.embeddings.base import Embedder
 from cachellm.observability.metrics import Metrics, get_metrics
 from cachellm.providers.registry import ProviderRegistry
 from cachellm.settings import Settings
 
+if TYPE_CHECKING:  # redis modules are imported only when that backend is chosen
+    from cachellm.cache.analytics import Analytics
+    from cachellm.cache.exact_store import ExactStore
+    from cachellm.cache.vector_store import VectorStore
+
 log = structlog.get_logger(__name__)
+
+REDIS_MISSING = (
+    "The redis backend needs the optional extra. Install it with "
+    "`pip install 'cachellm-proxy[redis]'`, or leave CACHELLM_BACKEND at its "
+    "default and the cache runs in memory with nothing to install."
+)
 
 
 @dataclass
@@ -109,6 +116,14 @@ async def build_state(
 
 
 async def _attach_redis(state: AppState, settings: Settings) -> None:
+    try:
+        from cachellm.cache.analytics import Analytics
+        from cachellm.cache.exact_store import ExactStore
+        from cachellm.cache.redis_client import build_redis
+        from cachellm.cache.vector_store import VectorStore
+    except ImportError as exc:
+        raise ImportError(REDIS_MISSING) from exc
+
     redis = build_redis(settings)
     await redis.ping()
     vectors = VectorStore(redis, settings)

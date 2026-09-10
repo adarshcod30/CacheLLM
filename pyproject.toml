@@ -23,19 +23,17 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "boto3>=1.43.91",
+    # The proxy itself and the semantic matching. Nothing here is optional:
+    # this is the smallest set that can cache by meaning and serve HTTP.
     "fastapi>=0.141.1",
-    "fastembed>=0.8.0",
-    "httpx>=0.28.1",
-    "numpy>=2.4.6",
-    "openai>=3.11.0",
-    "prometheus-client>=0.26.0",
+    "uvicorn[standard]>=0.52.4",
+    "fastembed>=0.8.0",       # local embeddings, CPU, no API call
+    "numpy>=2.4.6",           # the default vector search is one matrix multiply
     "pydantic-settings>=2.15.0",
-    "redis>=8.1.0",
-    "redisvl>=0.27.1",
+    "prometheus-client>=0.26.0",  # ~50 KB: writes a text page, not a server
     "structlog>=26.1.0",
     "typer>=0.27.2",
-    "uvicorn[standard]>=0.52.4",
+    "httpx>=0.28.1",
 ]
 
 [project.urls]
@@ -47,6 +45,15 @@ Issues = "https://github.com/adarshcod30/CacheLLM/issues"
 cachellm = "cachellm:main"
 
 [project.optional-dependencies]
+# Only install what you actually route to.
+aws = [
+    "boto3>=1.43.91",
+    "botocore[crt]>=1.43.91",  # `aws login` credentials need the CRT extra
+]
+redis = [
+    "redis>=8.1.0",
+    "redisvl>=0.27.1",
+]
 observability = [
     "langfuse>=4.15.2",
     "opentelemetry-exporter-otlp-proto-http>=1.44.0",
@@ -60,8 +67,8 @@ datasets = [
     "datasets>=5.0.1",
     "pandas>=3.0.5",
 ]
-aws = [
-    "botocore[crt]>=1.43.91",
+all = [
+    "cachellm-proxy[aws,redis,observability,datasets]",
 ]
 
 [build-system]
@@ -77,6 +84,7 @@ module-name = "cachellm"
 [dependency-groups]
 dev = [
     "mypy>=2.3.1",
+    "openai>=3.11.0",   # only the SDK-compatibility test needs this
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",

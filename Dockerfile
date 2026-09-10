@@ -14,14 +14,14 @@ WORKDIR /app
 # Dependencies first, without the project itself, for a cacheable layer.
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev
+    uv sync --frozen --no-install-project --no-dev --extra redis --extra aws
 
 # README.md is required, not decorative: pyproject declares `readme`, so the
 # build backend refuses to build the project without it.
 COPY README.md ./
 COPY src/ ./src/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    uv sync --frozen --no-dev --extra redis --extra aws
 
 
 FROM python:3.11-slim-bookworm AS runtime

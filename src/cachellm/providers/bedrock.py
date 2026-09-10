@@ -145,8 +145,16 @@ class BedrockProvider(Provider):
         if self._client is None:
             with self._lock:
                 if self._client is None:
-                    import boto3
-                    from botocore.config import Config
+                    try:
+                        import boto3
+                        from botocore.config import Config
+                    except ImportError as exc:
+                        raise UpstreamError(
+                            "Routing to Bedrock needs the optional AWS extra. Install it "
+                            "with `pip install 'cachellm-proxy[aws]'`, or point "
+                            "CACHELLM_DEFAULT_PROVIDER at an OpenAI-compatible endpoint "
+                            "instead, which needs nothing extra."
+                        ) from exc
 
                     session_kwargs: dict[str, Any] = {"region_name": self._settings.aws_region}
                     if self._settings.aws_profile:
@@ -171,6 +179,8 @@ class BedrockProvider(Provider):
         kwargs = build_converse_kwargs(request, model_id)
         try:
             response = await asyncio.to_thread(lambda: self._get_client().converse(**kwargs))
+        except UpstreamError:
+            raise  # already carries an actionable message; do not re-wrap it
         except Exception as exc:  # boto raises many distinct client errors
             log.warning("bedrock_error", model=model_id, error=str(exc)[:300])
             raise UpstreamError(_explain(exc)) from exc

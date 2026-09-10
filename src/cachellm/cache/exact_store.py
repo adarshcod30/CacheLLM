@@ -7,9 +7,12 @@ about a millisecond and takes the pressure off the vector index.
 
 from __future__ import annotations
 
-import redis.asyncio as aioredis
+from typing import TYPE_CHECKING
 
 from cachellm.settings import Settings
+
+if TYPE_CHECKING:  # redis is an optional extra; this module imports without it
+    import redis.asyncio as aioredis
 
 
 class ExactStore:

@@ -360,24 +360,36 @@ name = "cachellm-proxy"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "boto3" },
     { name = "fastapi" },
     { name = "fastembed" },
     { name = "httpx" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "openai" },
     { name = "prometheus-client" },
     { name = "pydantic-settings" },
-    { name = "redis" },
-    { name = "redisvl" },
     { name = "structlog" },
     { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.optional-dependencies]
+all = [
+    { name = "boto3" },
+    { name = "botocore", extra = ["crt"] },
+    { name = "datasets" },
+    { name = "langfuse" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "opentelemetry-instrumentation-botocore" },
+    { name = "opentelemetry-instrumentation-fastapi" },
+    { name = "opentelemetry-instrumentation-httpx" },
+    { name = "opentelemetry-instrumentation-redis" },
+    { name = "opentelemetry-sdk" },
+    { name = "pandas" },
+    { name = "redis" },
+    { name = "redisvl" },
+]
 aws = [
+    { name = "boto3" },
     { name = "botocore", extra = ["crt"] },
 ]
 datasets = [
@@ -393,10 +405,15 @@ observability = [
     { name = "opentelemetry-instrumentation-redis" },
     { name = "opentelemetry-sdk" },
 ]
+redis = [
+    { name = "redis" },
+    { name = "redisvl" },
+]
 
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
+    { name = "openai" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -405,15 +422,15 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "boto3", specifier = ">=1.43.91" },
+    { name = "boto3", marker = "extra == 'aws'", specifier = ">=1.43.91" },
     { name = "botocore", extras = ["crt"], marker = "extra == 'aws'", specifier = ">=1.43.91" },
+    { name = "cachellm-proxy", extras = ["aws", "redis", "observability", "datasets"], marker = "extra == 'all'" },
     { name = "datasets", marker = "extra == 'datasets'", specifier = ">=5.0.1" },
     { name = "fastapi", specifier = ">=0.141.1" },
     { name = "fastembed", specifier = ">=0.8.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "langfuse", marker = "extra == 'observability'", specifier = ">=4.15.2" },
     { name = "numpy", specifier = ">=2.4.6" },
-    { name = "openai", specifier = ">=3.11.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'observability'", specifier = ">=1.44.0" },
     { name = "opentelemetry-instrumentation-botocore", marker = "extra == 'observability'", specifier = ">=0.65b0" },
     { name = "opentelemetry-instrumentation-fastapi", marker = "extra == 'observability'", specifier = ">=0.65b0" },
@@ -423,17 +440,18 @@ requires-dist = [
     { name = "pandas", marker = "extra == 'datasets'", specifier = ">=3.0.5" },
     { name = "prometheus-client", specifier = ">=0.26.0" },
     { name = "pydantic-settings", specifier = ">=2.15.0" },
-    { name = "redis", specifier = ">=8.1.0" },
-    { name = "redisvl", specifier = ">=0.27.1" },
+    { name = "redis", marker = "extra == 'redis'", specifier = ">=8.1.0" },
+    { name = "redisvl", marker = "extra == 'redis'", specifier = ">=0.27.1" },
     { name = "structlog", specifier = ">=26.1.0" },
     { name = "typer", specifier = ">=0.27.2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.4" },
 ]
-provides-extras = ["observability", "datasets", "aws"]
+provides-extras = ["aws", "redis", "observability", "datasets", "all"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy", specifier = ">=2.3.1" },
+    { name = "openai", specifier = ">=3.11.0" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-asyncio", specifier = ">=1.4.0" },
     { name = "pytest-cov", specifier = ">=7.1.0" },

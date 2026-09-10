@@ -15,11 +15,12 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import asdict, dataclass
-from typing import Any
-
-import redis.asyncio as aioredis
+from typing import TYPE_CHECKING, Any
 
 from cachellm.settings import Settings
+
+if TYPE_CHECKING:  # redis is an optional extra; this module imports without it
+    import redis.asyncio as aioredis
 
 
 @dataclass

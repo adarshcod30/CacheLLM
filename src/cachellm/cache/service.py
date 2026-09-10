@@ -9,14 +9,13 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 import structlog
 
-from cachellm.cache.analytics import Analytics, NearMiss
+from cachellm.cache.analytics import NearMiss
 from cachellm.cache.entry import CacheEntry
-from cachellm.cache.exact_store import ExactStore
 from cachellm.cache.keys import (
     embedding_text,
     exact_hash,
@@ -27,11 +26,15 @@ from cachellm.cache.keys import (
     entry_id as make_entry_id,
 )
 from cachellm.cache.policy import PolicyDecision, decide
-from cachellm.cache.vector_store import VectorStore
 from cachellm.embeddings.base import Embedder
 from cachellm.models import ChatCompletionRequest
 from cachellm.pricing import estimate_cost
 from cachellm.settings import Settings
+
+if TYPE_CHECKING:  # both backends satisfy these; neither is imported at runtime
+    from cachellm.cache.analytics import Analytics
+    from cachellm.cache.exact_store import ExactStore
+    from cachellm.cache.vector_store import VectorStore
 
 log = structlog.get_logger(__name__)
 

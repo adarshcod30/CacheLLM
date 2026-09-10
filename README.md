@@ -233,6 +233,18 @@ CACHELLM_DEFAULT_PROVIDER=fake CACHELLM_FAKE_LATENCY_MS=600 cachellm serve
 
 That is the whole install. No Redis, no Docker, no API key. The cache runs in the proxy's own memory and the built-in fake provider stands in for a model, so you can watch it work before spending anything.
 
+You only install what you actually route to. The base package is the proxy plus the local embedding model; AWS and Redis are extras, and nothing here installs Grafana or a Prometheus server, which are separate programs rather than Python packages.
+
+| You want | Install |
+| --- | --- |
+| Any OpenAI-compatible endpoint: OpenAI, Groq, Gemini, Ollama, vLLM | `pip install cachellm-proxy` |
+| AWS Bedrock | `pip install "cachellm-proxy[aws]"` |
+| Redis instead of the in-process cache | `pip install "cachellm-proxy[redis]"` |
+| Tracing to Langfuse or Tempo | `pip install "cachellm-proxy[observability]"` |
+| Everything | `pip install "cachellm-proxy[all]"` |
+
+Ask for a provider or backend whose extra is missing and the proxy names the exact command to fix it rather than raising an import error.
+
 The distribution is `cachellm-proxy` because PyPI blocks `cachellm` as too close to an existing `cachelm`. The import name and the CLI are both still `cachellm`.
 
 From source, if you plan to change anything:
