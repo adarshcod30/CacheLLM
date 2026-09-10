@@ -288,7 +288,13 @@ class CacheService:
                 "Over half of requests bypassed the cache. Check X-Cache-Bypass-Reason: "
                 "temperature, tool calls, JSON mode and multi-turn are skipped by default."
             )
-        if not self.settings.is_calibrated:
+        if self.settings.embedding_backend == "hash":
+            diagnostics.append(
+                "Running the hash embedding backend. It is a deterministic test double "
+                "with no understanding of meaning, so the semantic tier will rarely fire. "
+                "Set CACHELLM_EMBEDDING_BACKEND=fastembed for real matching."
+            )
+        elif not self.settings.is_calibrated:
             diagnostics.append(
                 f"No measured threshold for embedding model "
                 f"{self.settings.embedding_model!r}; using {self.settings.calibrated_threshold}. "

@@ -99,13 +99,21 @@ jobs:
       - run: uv sync --frozen
       - name: Start the proxy
         env:
+          # The smoke test uses the real embedder on purpose. The hash backend
+          # is a test double with no sense of meaning, so with it the semantic
+          # tier never fires and this job would not be testing the thing that
+          # makes the project interesting.
+          CACHELLM_EMBEDDING_BACKEND: fastembed
           CACHELLM_FAKE_LATENCY_MS: "50"
         run: |
-          uv run uvicorn cachellm.api.app:create_app --factory --port 8080 &
-          for _ in $(seq 1 40); do
+          nohup uv run uvicorn cachellm.api.app:create_app --factory --port 8080 \
+            > proxy.log 2>&1 &
+          echo $! > proxy.pid
+          for _ in $(seq 1 60); do
             curl -sf http://127.0.0.1:8080/healthz && break
-            sleep 1
+            sleep 2
           done
+          curl -sf http://127.0.0.1:8080/readyz
       - name: Replay a small workload and assert the cache actually works
         run: |
           uv run python -m bench.replay --requests 300 --concurrency 8 --reset \
@@ -117,16 +125,29 @@ jobs:
           errors = report["run"]["errors"]
           unseen = report["by_request_kind"].get("unseen", {})
           false_hits = unseen.get("HIT", 0)
-          print(f"hit rate {hit_rate:.1%}, errors {errors}, false hits {false_hits}")
+          semantic = report["outcomes"]["semantic_hits"]
+          print(f"hit rate {hit_rate:.1%}, semantic hits {semantic}, "
+                f"errors {errors}, false hits {false_hits}")
           assert errors == 0, "requests failed"
           assert hit_rate > 0.5, f"hit rate collapsed to {hit_rate}"
+          # The semantic tier is the point of the project; prove it fired.
+          assert semantic > 0, "semantic tier served nothing"
           # Never-before-seen questions must not be answered from cache.
           assert false_hits == 0, f"{false_hits} false positives on unseen prompts"
           PY
+      - name: Stop the proxy
+        if: always()
+        run: |
+          [ -f proxy.pid ] && kill "$(cat proxy.pid)" 2>/dev/null || true
+          echo "--- proxy log tail ---"
+          tail -20 proxy.log || true
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: load-test
-          path: results/
+          path: |
+            results/
+            proxy.log
 
   docker:
     runs-on: ubuntu-latest

@@ -214,7 +214,7 @@ MiniLM gives four times the safe recall of bge-small at a third of the download 
 You need Python 3.11 or newer and a Redis 8 instance. Redis 8 is required because the vector index needs the query engine, and it must be database 0 because Redis Search only indexes that one.
 
 ```bash
-git clone https://github.com/adarshcod30/cachellm.git
+git clone https://github.com/adarshcod30/CacheLLM.git
 cd cachellm
 uv sync
 ```
