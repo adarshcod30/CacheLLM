@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import sys
+import textwrap
 import time
 from typing import Any
 
@@ -73,7 +74,12 @@ def header(stats: dict[str, Any], embedding_model: str = "") -> list[str]:
         bits.append(f"{MAGENTA}shadow mode{RESET}")
     if not stats.get("caching_enabled", True):
         bits.append(f"{AMBER}caching disabled{RESET}")
-    return ["", "  " + f" {DIM}·{RESET} ".join(bits), ""]
+    lines = ["", "  " + f" {DIM}·{RESET} ".join(bits)]
+    # A reachable Redis that was passed over is worth a line of its own:
+    # whoever started it expected it to be used.
+    if note := stats.get("backend_note"):
+        lines += [f"  {AMBER}{row}{RESET}" for row in textwrap.wrap(str(note), 74)]
+    return [*lines, ""]
 
 
 def summary(stats: dict[str, Any], embedding_model: str = "") -> str:

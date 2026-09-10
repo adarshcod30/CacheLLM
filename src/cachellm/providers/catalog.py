@@ -77,12 +77,10 @@ OPENAI_FAMILIES: tuple[str, ...] = (
 #: Together both use `vendor/model` ids, and stripping their vendor segment
 #: makes the upstream reject the request as an unknown model.
 #:
-#: These three names are therefore reserved. A model id that genuinely begins
-#: `openai/`, `bedrock/` or `fake/` is read as a routing instruction: Groq's
-#: `openai/gpt-oss-120b` reaches the upstream as `gpt-oss-120b`. That is the one
-#: known collision, it affects one model family on one host, and the workaround
-#: is to point CACHELLM_OPENAI_BASE_URL at Groq and send the bare id if the host
-#: accepts it.
+#: A model id starting with one of these always routes to that adapter. What
+#: reaches the upstream is the adapter's call: `openai/` is removed only when the
+#: upstream is OpenAI's own API, because Groq, OpenRouter and Together name
+#: OpenAI's models `openai/gpt-oss-120b` and would reject the bare id.
 ROUTING_PREFIXES: tuple[str, ...] = ("bedrock", "openai", "fake")
 
 
@@ -181,7 +179,7 @@ HOSTS: tuple[Host, ...] = (
         "https://generativelanguage.googleapis.com/v1beta/openai/",
         "GEMINI_API_KEY",
         None,
-        ("gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"),
+        ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.5-flash"),
         "Also reads GOOGLE_API_KEY. Generous free tier.",
     ),
     Host(
@@ -201,7 +199,7 @@ HOSTS: tuple[Host, ...] = (
         "https://api.groq.com/openai/v1",
         "GROQ_API_KEY",
         None,
-        ("llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"),
+        ("openai/gpt-oss-20b", "openai/gpt-oss-120b", "qwen/qwen3.6-27b"),
         "Very fast, useful free tier.",
     ),
     Host(

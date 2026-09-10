@@ -155,6 +155,65 @@ def test_detection_stands_aside_when_the_operator_has_configured_things(monkeypa
     assert (cfg.default_provider, cfg.openai_base_url) == before
 
 
+def test_detection_respects_settings_written_in_a_dotenv_file(monkeypatch, tmp_path) -> None:
+    """Only exported variables used to count, so a vendor key in the shell won.
+
+    Found while preparing the live Gemini run: a base URL written in .env was
+    replaced by Gemini's the moment GEMINI_API_KEY was exported.
+    """
+    for name in (
+        "CACHELLM_DEFAULT_PROVIDER",
+        "CACHELLM_OPENAI_BASE_URL",
+        "CACHELLM_OPENAI_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "not-a-real-key")
+    (tmp_path / ".env").write_text("CACHELLM_OPENAI_BASE_URL=http://my-vllm:8000/v1\n")
+    monkeypatch.chdir(tmp_path)
+
+    cfg = Settings()
+    assert detect.apply(cfg) is None
+    assert cfg.openai_base_url == "http://my-vllm:8000/v1"
+
+
+def _only_groq_available(monkeypatch) -> None:
+    for name in (
+        "CACHELLM_DEFAULT_PROVIDER",
+        "CACHELLM_OPENAI_BASE_URL",
+        "CACHELLM_OPENAI_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    for h in HOSTS:
+        if h.env_key:
+            monkeypatch.delenv(h.env_key, raising=False)
+    for extra in ("GOOGLE_API_KEY", "GOOGLE_GENAI_API_KEY", "OPENAI_KEY"):
+        monkeypatch.delenv(extra, raising=False)
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test-value")
+    monkeypatch.setattr(detect, "port_open", lambda *a, **k: False)
+    monkeypatch.setattr(detect, "aws_credentials_available", lambda: False)
+
+
+def test_an_empty_key_line_in_dotenv_does_not_switch_detection_off(monkeypatch, tmp_path) -> None:
+    _only_groq_available(monkeypatch)
+    (tmp_path / ".env").write_text("CACHELLM_OPENAI_API_KEY=\n")
+    monkeypatch.chdir(tmp_path)
+    cfg = Settings()
+    assert "Groq" in (detect.apply(cfg) or "")
+
+
+def test_copying_the_shipped_env_example_leaves_detection_on(monkeypatch, tmp_path) -> None:
+    """The README says to start from .env.example, so it must not decide for you."""
+    import shutil
+    from pathlib import Path
+
+    _only_groq_available(monkeypatch)
+    shutil.copy(Path(__file__).resolve().parents[1] / ".env.example", tmp_path / ".env")
+    monkeypatch.chdir(tmp_path)
+    cfg = Settings()
+    assert "Groq" in (detect.apply(cfg) or "")
+    assert cfg.openai_base_url == HOSTS_BY_KEY["groq"].base_url
+
+
 def test_detection_configures_settings_when_nothing_was_set(monkeypatch) -> None:
     for name in (
         "CACHELLM_DEFAULT_PROVIDER",

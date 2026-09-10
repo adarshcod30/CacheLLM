@@ -33,3 +33,16 @@ def test_pricing_file_overrides_defaults(tmp_path, monkeypatch) -> None:
     assert pricing.estimate_cost("amazon.nova-lite-v1:0", 1_000_000, 0) == 1.0
     pricing._loaded_override = False
     pricing.PRICES["amazon.nova-lite-v1:0"] = pricing.ModelPrice(0.06, 0.24)
+
+
+def test_the_longest_known_prefix_prices_a_preview_model() -> None:
+    """Table order used to decide, so a Flash-Lite preview was priced as Flash."""
+    assert price_for("gemini-2.5-flash-lite-preview-09-2025") == price_for("gemini-2.5-flash-lite")
+    assert price_for("gpt-4o-mini-2024-07-18") == price_for("gpt-4o-mini")
+
+
+def test_models_checked_live_have_real_prices() -> None:
+    """Gemini and Groq were run live, so their savings should not use a stand-in."""
+    for model in ("gemini-2.5-flash", "models/gemini-3.5-flash", "openai/gpt-oss-20b"):
+        assert price_for(model) != price_for("some-model-nobody-has-heard-of"), model
+    assert price_for("openai/gpt-oss-20b").output_per_m == 0.30

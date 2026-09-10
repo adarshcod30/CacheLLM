@@ -16,8 +16,10 @@ cache that takes an application down when it breaks is worse than no cache.
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 import structlog
 from fastapi import Request
@@ -46,6 +48,44 @@ REDIS_MISSING = (
 )
 
 
+class RedisUnusableError(RuntimeError):
+    """Redis answered, but it cannot hold this cache.
+
+    Different in kind from "no Redis here". Nobody runs a Redis server by
+    accident, so when one answers and still cannot be used, the operator almost
+    certainly meant to use it and deserves to hear why it was passed over.
+    """
+
+
+def _where(url: str) -> str:
+    """Host and port only. The URL may carry a password, and this gets logged."""
+    parsed = urlparse(url)
+    if parsed.hostname:
+        return f"{parsed.hostname}:{parsed.port or 6379}"
+    return "the configured address"
+
+
+async def _require_search(redis: Any, settings: Settings) -> None:
+    """Fail with a plain explanation before RedisVL fails with a cryptic one."""
+    where = _where(settings.redis_url)
+    db = int(redis.connection_pool.connection_kwargs.get("db", 0) or 0)
+    if db != 0:
+        raise RedisUnusableError(
+            f"Redis at {where} answered, but CACHELLM_REDIS_URL selects database {db}. "
+            "Redis search can only index database 0, so end the URL with /0."
+        )
+    try:
+        await redis.execute_command("FT._LIST")
+    except Exception as exc:
+        if "unknown command" not in str(exc).lower():
+            raise
+        raise RedisUnusableError(
+            f"Redis at {where} answered, but it has no search module, so it cannot "
+            "store vectors. Redis 8 from Homebrew or the official Docker image includes "
+            "it. Many Linux distribution packages do not."
+        ) from exc
+
+
 @dataclass
 class AppState:
     settings: Settings
@@ -62,6 +102,8 @@ class AppState:
     degraded_reason: str = ""
     #: Which backend actually started: "redis" or "memory".
     backend: str = "none"
+    #: Why a reachable Redis was passed over, shown by `cachellm stats`.
+    backend_note: str = ""
 
     @property
     def caching_on(self) -> bool:
@@ -96,8 +138,12 @@ async def build_state(
         except Exception as exc:
             redis_error = f"{type(exc).__name__}: {exc}"
             if settings.backend == "redis":
-                state.degraded_reason = redis_error
-                log.error("redis_unavailable_failing_open", error=redis_error)
+                unusable = isinstance(exc, RedisUnusableError)
+                state.degraded_reason = str(exc) if unusable else redis_error
+                log.error("redis_unavailable_failing_open", error=state.degraded_reason)
+            elif isinstance(exc, RedisUnusableError):
+                state.backend_note = f"{exc} Using the in-process cache instead."
+                log.warning("redis_unusable_using_memory", reason=str(exc))
             else:
                 log.info(
                     "redis_unavailable_using_memory",
@@ -135,9 +181,15 @@ async def _attach_redis(state: AppState, settings: Settings) -> None:
         raise ImportError(REDIS_MISSING) from exc
 
     redis = build_redis(settings)
-    await redis.ping()
-    vectors = VectorStore(redis, settings)
-    await vectors.connect()
+    try:
+        await redis.ping()
+        await _require_search(redis, settings)
+        vectors = VectorStore(redis, settings)
+        await vectors.connect()
+    except Exception:
+        with contextlib.suppress(Exception):
+            await redis.aclose()
+        raise
     state.redis = redis
     _wire(
         state, settings, vectors, ExactStore(redis, settings), Analytics(redis, settings), "redis"

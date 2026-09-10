@@ -71,6 +71,17 @@ def final_chunk(
     )
 
 
+def error_event(message: str, err_type: str = "api_error", code: str | None = None) -> str:
+    """A failure after the stream has started, in OpenAI's shape.
+
+    The status line has already gone out as 200 by then, so this event is the
+    only way left to say something broke. The official SDKs raise an error when
+    they read it, instead of ending quietly with a half-written answer.
+    """
+    payload = {"error": {"message": message, "type": err_type, "param": None, "code": code}}
+    return f"data: {json.dumps(payload, separators=(',', ':'))}\n\n"
+
+
 def split_for_replay(text: str, max_chars: int = 24) -> list[str]:
     """Chop a cached answer into believable stream chunks.
 

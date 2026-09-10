@@ -126,6 +126,15 @@ def test_our_own_prefixes_are_stripped(sent: str, forwarded: str) -> None:
     assert strip_routing_prefix(sent) == forwarded
 
 
+def test_groq_names_for_openai_models_reach_groq_whole() -> None:
+    settings = make_settings(
+        default_provider="openai", openai_base_url="https://api.groq.com/openai/v1"
+    )
+    provider, name = ProviderRegistry(settings).resolve("openai/gpt-oss-120b")
+    assert name == "openai"
+    assert provider.resolve_model("openai/gpt-oss-120b") == "openai/gpt-oss-120b"
+
+
 @pytest.mark.parametrize(
     "model",
     [

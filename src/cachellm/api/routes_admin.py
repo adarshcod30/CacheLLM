@@ -76,6 +76,8 @@ async def stats(request: Request) -> dict[str, Any]:
     data = await state.cache.stats()
     data["cache_available"] = True
     data["backend"] = state.backend
+    if state.backend_note:
+        data["backend_note"] = state.backend_note
     data["caching_enabled"] = state.settings.enabled
     data["shadow_mode"] = state.settings.shadow_mode
     data["in_flight"] = state.singleflight.in_flight

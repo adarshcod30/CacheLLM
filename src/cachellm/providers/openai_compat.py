@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 import structlog
@@ -45,6 +46,19 @@ class OpenAICompatProvider(Provider):
         # the auth header, against a fake upstream rather than the network.
         self._transport = transport
         self._client: httpx.AsyncClient | None = None
+        self._is_openai_itself = urlparse(self._base_url).hostname == "api.openai.com"
+
+    def resolve_model(self, model: str) -> str:
+        """Drop our `openai/` routing prefix only when the upstream is OpenAI.
+
+        OpenAI's own API wants `gpt-4o-mini`. Groq, OpenRouter and Together all
+        name OpenAI's models `openai/gpt-oss-120b`, so to them the prefix is part
+        of the model id. Stripping it there turned Groq's two main chat models
+        into 404s, which only showed up against the live API.
+        """
+        if model.startswith("openai/") and not self._is_openai_itself:
+            return model
+        return super().resolve_model(model)
 
     def _http(self) -> httpx.AsyncClient:
         if self._client is None:

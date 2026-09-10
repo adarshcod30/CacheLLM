@@ -32,7 +32,7 @@ from cachellm.models import (
 )
 from cachellm.observability import span
 from cachellm.pricing import estimate_cost
-from cachellm.providers.base import Provider
+from cachellm.providers.base import Provider, StreamEvent
 
 log = structlog.get_logger(__name__)
 router = APIRouter()
@@ -240,6 +240,12 @@ async def chat_completions(request: Request, body: ChatCompletionRequest) -> Any
         return await _proxy_once(state, body, lookup, provider, provider_name, started)
 
 
+async def _count_provider_error(state: AppState, provider_name: str) -> None:
+    state.metrics.provider_errors.labels(provider=provider_name).inc()
+    if state.analytics is not None:
+        await state.analytics.incr("provider_errors")
+
+
 async def _proxy_once(
     state: AppState,
     body: ChatCompletionRequest,
@@ -264,9 +270,7 @@ async def _proxy_once(
         else:
             result, coalesced = await call(), False
     except UpstreamError:
-        state.metrics.provider_errors.labels(provider=provider_name).inc()
-        if state.analytics is not None:
-            await state.analytics.incr("provider_errors")
+        await _count_provider_error(state, provider_name)
         raise
 
     if coalesced:
@@ -361,6 +365,25 @@ async def _proxy_stream(
     """
     stream_id = sse.new_stream_id()
     created = int(time.time())
+    upstream = aiter(provider.stream(body))
+
+    # Hold the response until the upstream sends its first event. A wrong model
+    # name or a bad key fails right here, so the caller gets the upstream's real
+    # status code. Answering first used to turn every such failure into a 200
+    # stream with an empty answer and nothing to say why.
+    try:
+        first: StreamEvent | None = await anext(upstream)
+    except StopAsyncIteration:
+        first = None
+    except UpstreamError:
+        await _count_provider_error(state, provider_name)
+        raise
+
+    async def events() -> AsyncIterator[StreamEvent]:
+        if first is not None:
+            yield first
+        async for event in upstream:
+            yield event
 
     async def generate() -> AsyncIterator[str]:
         buffer: list[str] = []
@@ -369,7 +392,7 @@ async def _proxy_stream(
         completion_tokens = 0
         yield sse.role_chunk(stream_id, body.model, created)
         try:
-            async for event in provider.stream(body):
+            async for event in events():
                 if event.delta:
                     buffer.append(event.delta)
                     yield sse.text_chunk(stream_id, body.model, created, event.delta)
@@ -379,11 +402,9 @@ async def _proxy_stream(
                     prompt_tokens = event.prompt_tokens or prompt_tokens
                     completion_tokens = event.completion_tokens or completion_tokens
         except UpstreamError as exc:
-            state.metrics.provider_errors.labels(provider=provider_name).inc()
-            if state.analytics is not None:
-                await state.analytics.incr("provider_errors")
-            log.warning("stream_failed", error=str(exc)[:200])
-            yield sse.final_chunk(stream_id, body.model, created, "error", None)
+            await _count_provider_error(state, provider_name)
+            log.warning("stream_failed", error=exc.message[:200])
+            yield sse.error_event(exc.message, exc.err_type, exc.code)
             yield sse.DONE
             return
 

@@ -25,7 +25,9 @@ def req(model: str = "llama3.2", **kw) -> ChatCompletionRequest:
     return ChatCompletionRequest(model=model, temperature=0, **kw)
 
 
-def provider_with(handler, api_key: str = "sk-test") -> tuple[OpenAICompatProvider, list]:
+def provider_with(
+    handler, api_key: str = "sk-test", base_url: str = "https://upstream.test/v1"
+) -> tuple[OpenAICompatProvider, list]:
     """An adapter whose HTTP client talks to `handler` instead of the network."""
     seen: list[httpx.Request] = []
 
@@ -37,7 +39,7 @@ def provider_with(handler, api_key: str = "sk-test") -> tuple[OpenAICompatProvid
     # client the real way, auth header included, and only the network is fake.
     p = OpenAICompatProvider(
         make_settings(),
-        base_url="https://upstream.test/v1",
+        base_url=base_url,
         api_key=api_key,
         transport=httpx.MockTransport(recording),
     )
@@ -129,10 +131,30 @@ async def test_vendor_ids_containing_slashes_reach_the_upstream_whole(model: str
     assert json.loads(seen[0].content)["model"] == model
 
 
-async def test_our_own_routing_prefix_is_removed_before_sending() -> None:
-    p, seen = provider_with(lambda r: httpx.Response(200, json=completion()))
+async def test_our_routing_prefix_is_removed_when_the_upstream_is_openai() -> None:
+    p, seen = provider_with(
+        lambda r: httpx.Response(200, json=completion()), base_url="https://api.openai.com/v1"
+    )
     await p.complete(req(model="openai/gpt-4o-mini"))
     assert json.loads(seen[0].content)["model"] == "gpt-4o-mini"
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "https://api.groq.com/openai/v1",
+        "https://openrouter.ai/api/v1",
+        "https://api.together.xyz/v1",
+    ],
+)
+async def test_the_openai_prefix_is_part_of_the_model_id_on_other_hosts(base_url: str) -> None:
+    """Found live: Groq's two main chat models are `openai/gpt-oss-120b` and `-20b`.
+
+    Stripping the prefix sent Groq `gpt-oss-20b`, which it answered with a 404.
+    """
+    p, seen = provider_with(lambda r: httpx.Response(200, json=completion()), base_url=base_url)
+    await p.complete(req(model="openai/gpt-oss-120b"))
+    assert json.loads(seen[0].content)["model"] == "openai/gpt-oss-120b"
 
 
 @pytest.mark.parametrize(

@@ -64,12 +64,24 @@ class FastEmbedEmbedder(Embedder):
         return vectors[0]
 
     async def embed_batch(self, texts: list[str]) -> list[np.ndarray]:
+        """Embed many texts, running the model once per distinct uncached text.
+
+        Results are assembled from what was just computed, never read back out
+        of the cache. The cache is bounded, so reading back used to fail two
+        ways: a batch larger than the cache evicted its own first results, and
+        a cache size of 0 made every call fail, which quietly turned caching off.
+        """
         if not texts:
             return []
         model = await self._ensure_model()
-        pending = [t for t in texts if self._cache_get(t) is None]
+        found: dict[str, np.ndarray] = {}
+        for text in texts:
+            if (hit := self._cache_get(text)) is not None:
+                found[text] = hit
+        pending = list(dict.fromkeys(t for t in texts if t not in found))
         if pending:
             raw = await asyncio.to_thread(lambda: list(model.embed(pending)))
             for text, vector in zip(pending, raw, strict=True):
-                self._cache_put(text, self.normalise(np.asarray(vector, dtype=np.float32)))
-        return [self._cache[t] for t in texts]
+                found[text] = self.normalise(np.asarray(vector, dtype=np.float32))
+                self._cache_put(text, found[text])
+        return [found[t] for t in texts]

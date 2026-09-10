@@ -131,17 +131,21 @@ def apply(settings: Any) -> str | None:
     CACHELLM_OPENAI_API_KEY being set means the decision is already made, and
     detection must not second-guess it.
 
+    "Set" means set anywhere settings are read from, not just exported. A base
+    URL written in a .env file used to be replaced by whichever vendor key
+    happened to be in the shell, because only the process environment was
+    checked. Settings already records which fields came from any source.
+
     Returns a one-line description of what it configured, or None.
     """
-    explicit = any(
-        os.environ.get(name, "").strip()
-        for name in (
-            "CACHELLM_DEFAULT_PROVIDER",
-            "CACHELLM_OPENAI_BASE_URL",
-            "CACHELLM_OPENAI_API_KEY",
-        )
+    fields = ("default_provider", "openai_base_url", "openai_api_key")
+    exported = any(os.environ.get(f"CACHELLM_{name.upper()}", "").strip() for name in fields)
+    # An empty `CACHELLM_OPENAI_API_KEY=` line is a placeholder, not a decision.
+    written = set(getattr(settings, "model_fields_set", ()))
+    configured = any(
+        name in written and str(getattr(settings, name, "") or "").strip() for name in fields
     )
-    if explicit:
+    if exported or configured:
         return None
 
     options = available(include_fake=False)

@@ -24,3 +24,11 @@ coverage.xml
 # build artefacts
 dist/
 results/bedrock/load_test_records.json
+
+# Local tool settings and session files, never committed
+.claude/
+.claude.json
+CLAUDE.local.md
+
+# A live check keeps its proxy log only when it fails, for debugging
+results/live/*.log

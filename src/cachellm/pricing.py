@@ -50,6 +50,18 @@ PRICES: dict[str, ModelPrice] = {
     "gpt-4o-mini": ModelPrice(0.15, 0.60),
     "gpt-4o": ModelPrice(2.50, 10.00),
     "gpt-4.1-mini": ModelPrice(0.40, 1.60),
+    # --- Google Gemini, paid tier, output includes thinking (checked 2026-09-11) ---
+    "gemini-2.5-flash": ModelPrice(0.30, 2.50),
+    "gemini-2.5-flash-lite": ModelPrice(0.10, 0.40),
+    "gemini-2.5-pro": ModelPrice(1.25, 10.00),
+    "gemini-3.5-flash": ModelPrice(1.50, 9.00),
+    "gemini-3.5-flash-lite": ModelPrice(0.30, 2.50),
+    # --- Groq, keyed without the vendor segment (checked 2026-09-11) ---
+    "gpt-oss-20b": ModelPrice(0.075, 0.30),
+    "gpt-oss-120b": ModelPrice(0.15, 0.60),
+    "gpt-oss-safeguard-20b": ModelPrice(0.075, 0.30),
+    "qwen3.6-27b": ModelPrice(0.60, 3.00),
+    "qwen3.8-27b": ModelPrice(0.80, 4.00),
     # --- embeddings (input only) ---
     "amazon.titan-embed-text-v2:0": ModelPrice(0.02, 0.0),
     "text-embedding-3-small": ModelPrice(0.02, 0.0),
@@ -97,10 +109,13 @@ def price_for(model: str) -> ModelPrice:
     key = normalise_model_id(model)
     if key in PRICES:
         return PRICES[key]
-    # Prefix match so undated model revisions still price sensibly.
-    for known, price in PRICES.items():
-        if key.startswith(known.split("-2024")[0].split("-v1:")[0]):
-            return price
+    # Prefix match so dated or preview revisions still price sensibly. The
+    # longest match wins: `gemini-2.5-flash-lite-preview` is a Flash-Lite, and
+    # taking the first match in table order priced it as the dearer Flash.
+    stems = {known.split("-2024")[0].split("-v1:")[0]: known for known in PRICES}
+    matches = [stem for stem in stems if key.startswith(stem)]
+    if matches:
+        return PRICES[stems[max(matches, key=len)]]
     return _FALLBACK
 
 
