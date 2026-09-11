@@ -235,42 +235,43 @@ flowchart TB
 What happens to one request, from arrival to answer:
 
 ```mermaid
-sequenceDiagram
-    participant C as Client
-    participant P as CacheLLM
-    participant E as Embedder
-    participant R as Store, memory or Redis
-    participant M as The host that serves the model
+flowchart TB
+    Start(["Chat request arrives"])
+    Route["Pick the host<br/>for this model"]
+    Safe{"Safe to<br/>cache?"}
+    Exact{"Exact<br/>match?"}
+    Embed["Embed the prompt<br/>MiniLM, about 5 ms"]
+    Close{"Close<br/>enough?"}
+    Flight{"Same question<br/>in flight?"}
+    Call["Call the host"]
+    Store["Store the answer<br/>unless it was cut off"]
+    OutMiss(["MISS<br/>fresh answer"])
 
-    C->>P: POST /v1/chat/completions
-    Note over P: Route the model name to a host
-    Note over P: Cacheable? Temperature, tools, JSON mode,<br/>multi-turn, personal data
-    alt not cacheable
-        P->>M: Forward untouched
-        M-->>C: Response, X-Cache: BYPASS
-    else cacheable
-        P->>R: Tier 1, exact hash lookup
-        alt exact hit
-            R-->>P: Stored answer
-            P-->>C: Response in about 2 ms, X-Cache: HIT (exact)
-        else no exact match
-            P->>E: Embed prompt (about 5 ms)
-            E-->>P: 384-dim unit vector
-            P->>R: Nearest neighbours inside this namespace
-            R-->>P: Candidates with similarity scores
-            alt similarity above the calibrated threshold
-                P-->>C: Stored answer, X-Cache: HIT (semantic), X-Cache-Similarity
-            else below threshold
-                P->>R: Record a near miss if it was close
-                Note over P: Single-flight: join an identical call in progress?
-                P->>M: Call the host
-                M-->>P: Answer, streamed or whole
-                P-->>C: Answer, X-Cache: MISS
-                P->>R: Store answer, vector and TTL
-            end
-        end
-    end
+    Start --> Route --> Safe
+    Safe -->|yes| Exact
+    Exact -->|no| Embed --> Close
+    Close -->|no| Flight
+    Flight -->|no| Call --> Store --> OutMiss
+
+    OutBypass(["BYPASS<br/>forwarded untouched"])
+    OutExact(["HIT, exact<br/>about 2 ms"])
+    OutSemantic(["HIT, semantic<br/>a few ms"])
+    OutShared(["MISS, shared<br/>one call for both"])
+
+    Safe -->|no| OutBypass
+    Exact -->|yes| OutExact
+    Close -->|yes| OutSemantic
+    Flight -->|yes| OutShared
+
+    classDef hit fill:#1a7f37,stroke:#2ea043,color:#ffffff
+    classDef miss fill:#9a6700,stroke:#d29922,color:#ffffff
+    classDef bypass fill:#57606a,stroke:#8c959f,color:#ffffff
+    class OutExact,OutSemantic hit
+    class OutMiss,OutShared miss
+    class OutBypass bypass
 ```
+
+Green outcomes were answered from the cache, amber ones went to the host, and grey ones were never eligible. Every response says which path it took in its `X-Cache` headers.
 
 ### Design choices, and why
 
