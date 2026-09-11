@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.3.0
+
+One proxy for every provider you use. With keys for Gemini and Groq and Ollama
+running, `gemini-2.5-flash` goes to Gemini, `openai/gpt-oss-20b` to Groq and
+`qwen2.5:0.5b` to Ollama, through a single proxy, with nothing to configure.
+Checked live against all three at once.
+
+### Several providers at once
+
+- **Every host you have becomes a route.** That means each host with a key in
+  the environment, plus Ollama when it is running and Bedrock when AWS
+  credentials resolve. The first one found is the default.
+- **Names go where they are served.** At startup the proxy asks each host for
+  its model list, which is how `openai/gpt-oss-20b` reaches Groq rather than
+  OpenAI. Lists refresh in the background when an unknown name turns up and
+  they are more than ten minutes old.
+- **A host prefix picks a host,** LiteLLM style: `groq/openai/gpt-oss-120b`
+  sends `openai/gpt-oss-120b` to Groq. Names like `claude-`, `gemini-` and
+  `grok-` go to their own host whenever you have its key.
+- **A missing host is explained, not guessed at.** A prefix for a host with no
+  key, such as `mistral/...` without `MISTRAL_API_KEY`, is refused with a
+  message naming the key to set, instead of being sent somewhere else.
+- **You stay in control.** `CACHELLM_HOSTS=groq,gemini` chooses the hosts and
+  makes the first one the default. With an explicit `CACHELLM_OPENAI_BASE_URL`,
+  such as a company gateway, everything still goes there, and hosts named in
+  `CACHELLM_HOSTS` are added alongside it.
+- **You can see every decision.** `cachellm route <model>` and
+  `GET /admin/route/{model}` say which host a name goes to, what it receives
+  and why. `cachellm providers` lists every route, and each response names the
+  host that answered in `X-Cache-Upstream`.
+- **`GET /v1/models` lists every host's live models,** so a UI such as Open
+  WebUI shows all of them in one place.
+- **Local models count as free.** A hit on Ollama saves time, not money, and
+  the stats now say so instead of pricing it like a hosted model.
+
+### Changed
+
+- **Cache entries are keyed by host.** On any host other than OpenAI itself,
+  answers cached by 0.2 are not reused after upgrading, so the cache starts
+  cold once. The default in-memory store starts cold on every restart anyway,
+  so this only matters with Redis or a snapshot file.
+- **Example models come from each provider's current list:** `gpt-5.6-luna`,
+  `claude-sonnet-5`, `grok-4.6` and `gemini-3.5-flash-lite`. Gemini 2.5
+  Flash-Lite and 2.5 Pro are listed by Google but refused to new users.
+
+### Fixed
+
+- **The model comparison benchmark no longer crashes on exit.** With six
+  models loaded at once it died while tearing them down. It now frees each
+  model before loading the next, times each one as the quietest of three
+  rounds, and saves the machine's load with the results.
+- **A correction to 0.2.2.** Its notes said real questions take longer to
+  embed than the benchmark showed. Measured again on a quiet machine, MiniLM
+  embeds a real question in 5.5 ms at the median, which matches the original
+  figure. The slower numbers came from a busy CPU, not from the method.
+
 ## 0.2.2
 
 Found by running the proxy against real Google Gemini and Groq for the first
