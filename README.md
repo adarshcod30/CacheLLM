@@ -194,45 +194,40 @@ Your app talks to CacheLLM exactly as it would talk to OpenAI. The proxy first d
 
 ```mermaid
 flowchart TB
-    App["Your application<br/>(OpenAI SDK, LangChain,<br/>Open WebUI, curl)"]
+    App["Your application<br/>OpenAI SDK, LangChain, Open WebUI, curl"]
 
-    subgraph Proxy["CacheLLM proxy (FastAPI)"]
-        direction TB
-        Auth["Auth + policy<br/>cacheable? category? TTL?"]
-        L1["Tier 1: exact match<br/>normalised hash"]
-        Embed["Embedder<br/>MiniLM ONNX, in process"]
-        L2["Tier 2: semantic search<br/>cosine, namespace filtered"]
-        Flight["Single-flight<br/>stampede guard"]
+    subgraph Proxy["CacheLLM proxy"]
+        Policy["Policy<br/>cacheable? category? TTL?"]
+        Exact["Tier 1: exact match<br/>normalised hash"]
+        Embed["Embedder<br/>MiniLM, on your CPU"]
+        Semantic["Tier 2: meaning match<br/>cosine, same namespace only"]
+        Flight["Single-flight<br/>one call per new question"]
         Router["Router<br/>model lists, host prefixes, names"]
-        Auth --> L1 --> Embed --> L2 --> Flight --> Router
+        Policy --> Exact
+        Exact -->|no exact match| Embed
+        Embed --> Semantic
+        Semantic -->|nothing close enough| Flight
+        Flight --> Router
     end
 
-    subgraph Store["Cache store: one of"]
-        Memory["In memory<br/>numpy matrix, the default"]
-        Redis["Redis 8<br/>shared by every copy"]
-    end
+    Store[("Cache store<br/>memory by default, or Redis 8")]
+    Exact -.->|hash lookup| Store
+    Semantic -.->|vector search| Store
 
-    subgraph Providers["Hosts, several at once"]
+    subgraph Hosts["Hosts, several at once"]
         Bedrock["AWS Bedrock<br/>Nova, Claude, Llama"]
         Hosted["OpenAI-compatible hosts<br/>OpenAI, Gemini, Groq, Claude, Grok"]
         Local["On your machine<br/>Ollama, vLLM, LM Studio"]
     end
 
-    subgraph Obs["Seeing what it did"]
-        Term["cachellm stats<br/>in the terminal"]
-        Prom["Prometheus, optional"]
-        Otel["OpenTelemetry, optional<br/>to Langfuse or Tempo"]
-    end
-
-    App -->|"POST /v1/chat/completions"| Auth
-    Proxy -.-> Store
     Router --> Bedrock
     Router --> Hosted
     Router --> Local
-    Proxy -->|"/admin/requests"| Term
-    Proxy -->|"/metrics"| Prom
-    Proxy -.->|"spans"| Otel
-    Proxy -->|"response + X-Cache headers"| App
+
+    Watch["See what it did<br/>cachellm stats, /metrics, traces"]
+    Router -.->|every request is logged| Watch
+
+    App <-->|"request in, answer out<br/>with X-Cache headers"| Policy
 ```
 
 ### Request flow
@@ -248,8 +243,8 @@ sequenceDiagram
     participant M as The host that serves the model
 
     C->>P: POST /v1/chat/completions
-    P->>P: Route the model name to a host
-    P->>P: Cacheable? Temperature, tools, JSON mode,<br/>multi-turn, personal data
+    Note over P: Route the model name to a host
+    Note over P: Cacheable? Temperature, tools, JSON mode,<br/>multi-turn, personal data
     alt not cacheable
         P->>M: Forward untouched
         M-->>C: Response, X-Cache: BYPASS
@@ -267,7 +262,7 @@ sequenceDiagram
                 P-->>C: Stored answer, X-Cache: HIT (semantic), X-Cache-Similarity
             else below threshold
                 P->>R: Record a near miss if it was close
-                P->>P: Single-flight: join an identical call in progress?
+                Note over P: Single-flight: join an identical call in progress?
                 P->>M: Call the host
                 M-->>P: Answer, streamed or whole
                 P-->>C: Answer, X-Cache: MISS
