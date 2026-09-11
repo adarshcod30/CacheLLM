@@ -14,6 +14,7 @@ ways that bite in production:
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 from collections.abc import AsyncIterator
 from typing import Any
@@ -156,10 +157,16 @@ class BedrockProvider(Provider):
                             "instead, which needs nothing extra."
                         ) from exc
 
-                    session_kwargs: dict[str, Any] = {"region_name": self._settings.aws_region}
-                    if self._settings.aws_profile:
-                        session_kwargs["profile_name"] = self._settings.aws_profile
-                    session = boto3.Session(**session_kwargs)
+                    # Passing a region overrides the profile's own region, so
+                    # only pass one somebody chose. boto3 reads
+                    # AWS_DEFAULT_REGION but not AWS_REGION, which the AWS CLI
+                    # and the docs use, so that one is read here. Hardcoding
+                    # us-east-1 once sent every user there.
+                    profile = self._settings.aws_profile or None
+                    region = self._settings.aws_region or os.environ.get("AWS_REGION") or None
+                    session = boto3.Session(region_name=region, profile_name=profile)
+                    if not session.region_name:
+                        session = boto3.Session(region_name="us-east-1", profile_name=profile)
                     self._client = session.client(
                         "bedrock-runtime",
                         config=Config(

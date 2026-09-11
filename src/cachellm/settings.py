@@ -80,12 +80,13 @@ class Settings(BaseSettings):
     # ----------------------------------------------------------------- storage
     #: Where the cache lives. "memory" needs nothing installed and searches a
     #: numpy matrix in this process; "redis" shares one cache across workers and
-    #: survives restarts; "auto" uses Redis when it is reachable and quietly
-    #: falls back to memory when it is not, which is what makes
-    #: `pip install cachellm-proxy && cachellm serve` work on a bare machine.
+    #: survives restarts; "auto" uses Redis when it is reachable and falls back
+    #: to memory when it is not, which is what makes
+    #: `pip install cachellm-proxy && cachellm serve` work on a bare machine. A
+    #: Redis that answers but cannot hold the cache is named in a warning.
     #:
     #: Memory is not a lesser option below roughly 100k entries: scanning 20,000
-    #: cached prompts takes 0.44 ms, where a Redis round trip alone costs 2-3 ms.
+    #: cached prompts takes about 0.85 ms, where a Redis round trip alone costs 2-3 ms.
     backend: Literal["auto", "memory", "redis"] = "auto"
     #: Cap on entries held in memory. 50k of 384-dim vectors is about 73 MB.
     memory_max_entries: int = 50_000
@@ -102,7 +103,7 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------- embeddings
     embedding_backend: Literal["fastembed", "hash"] = "fastembed"
     #: MiniLM is the default because it gave four times the safe recall of
-    #: bge-small on the evaluation corpus, at a third of the download size.
+    #: bge-small on the evaluation corpus, for a slightly larger download.
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dim: int = 384
     embedding_cache_size: int = 2048
@@ -170,7 +171,9 @@ class Settings(BaseSettings):
     #: which is where unattributable names like `llama3.2` actually live.
     #: Bedrock model ids are recognised by their vendor prefix regardless.
     default_provider: Literal["bedrock", "openai", "fake"] = "openai"
-    aws_region: str = "us-east-1"
+    #: Empty means AWS_REGION, then AWS_DEFAULT_REGION, then the AWS profile's
+    #: region, then us-east-1 if none of them is set.
+    aws_region: str = ""
     aws_profile: str = ""
     #: Simulated upstream latency for the `fake` provider, so a reproducible
     #: benchmark can show a realistic hit-versus-miss gap without spending money.

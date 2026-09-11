@@ -46,3 +46,10 @@ def test_models_checked_live_have_real_prices() -> None:
     for model in ("gemini-2.5-flash", "models/gemini-3.5-flash", "openai/gpt-oss-20b"):
         assert price_for(model) != price_for("some-model-nobody-has-heard-of"), model
     assert price_for("openai/gpt-oss-20b").output_per_m == 0.30
+
+
+def test_current_models_from_the_catalog_have_real_prices() -> None:
+    """Every example the catalog suggests for a paid host should price correctly."""
+    assert price_for("gpt-5.6-luna").input_per_m == 0.20
+    assert price_for("claude-haiku-4-5-20251001") == price_for("claude-haiku-4-5")
+    assert price_for("grok-4.6").output_per_m == 6.00

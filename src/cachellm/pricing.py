@@ -50,6 +50,20 @@ PRICES: dict[str, ModelPrice] = {
     "gpt-4o-mini": ModelPrice(0.15, 0.60),
     "gpt-4o": ModelPrice(2.50, 10.00),
     "gpt-4.1-mini": ModelPrice(0.40, 1.60),
+    # --- OpenAI, current models, standard tier (checked 2026-09-11) ---
+    "gpt-5.6-luna": ModelPrice(0.20, 1.20),
+    "gpt-5.6-terra": ModelPrice(2.00, 12.00),
+    "gpt-5.6-sol": ModelPrice(4.00, 20.00),
+    "gpt-6-astra": ModelPrice(10.00, 50.00),
+    # --- Anthropic, Claude API (checked 2026-09-11) ---
+    "claude-haiku-4-5": ModelPrice(1.00, 5.00),
+    "claude-sonnet-5": ModelPrice(2.00, 10.00),
+    "claude-opus-5": ModelPrice(5.00, 25.00),
+    "claude-fable-5-1": ModelPrice(10.00, 50.00),
+    # --- xAI, prompts under the long-context threshold (checked 2026-09-11) ---
+    "grok-4.6": ModelPrice(2.00, 6.00),
+    "grok-4.5": ModelPrice(2.00, 6.00),
+    "grok-4.3": ModelPrice(1.25, 2.50),
     # --- Google Gemini, paid tier, output includes thinking (checked 2026-09-11) ---
     "gemini-2.5-flash": ModelPrice(0.30, 2.50),
     "gemini-2.5-flash-lite": ModelPrice(0.10, 0.40),

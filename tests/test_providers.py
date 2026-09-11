@@ -127,3 +127,39 @@ async def test_fake_provider_streams_the_same_text_it_completes() -> None:
     whole = (await provider.complete(request)).text
     streamed = "".join([event.delta async for event in provider.stream(request)])
     assert streamed == whole
+
+
+def _bedrock_region(monkeypatch, **env: str) -> str:
+    pytest.importorskip("boto3")
+    from cachellm.providers.bedrock import BedrockProvider
+
+    for name in ("AWS_REGION", "AWS_DEFAULT_REGION", "AWS_PROFILE", "CACHELLM_AWS_REGION"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("AWS_CONFIG_FILE", "/nonexistent/aws-config")
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    settings = make_settings(aws_region=env.get("CACHELLM_AWS_REGION", ""))
+    return BedrockProvider(settings)._get_client().meta.region_name
+
+
+def test_bedrock_follows_the_standard_aws_region_variable(monkeypatch) -> None:
+    """The region used to be passed explicitly, so AWS_REGION was ignored and
+    everyone was sent to us-east-1."""
+    assert _bedrock_region(monkeypatch, AWS_REGION="eu-west-1") == "eu-west-1"
+
+
+def test_an_explicit_cachellm_region_still_wins(monkeypatch) -> None:
+    assert (
+        _bedrock_region(monkeypatch, AWS_REGION="eu-west-1", CACHELLM_AWS_REGION="ap-south-1")
+        == "ap-south-1"
+    )
+
+
+def test_bedrock_falls_back_to_us_east_1_when_nothing_says(monkeypatch) -> None:
+    assert _bedrock_region(monkeypatch) == "us-east-1"
+
+
+def test_bedrock_also_reads_the_default_region_variable(monkeypatch) -> None:
+    assert _bedrock_region(monkeypatch, AWS_DEFAULT_REGION="eu-central-1") == "eu-central-1"

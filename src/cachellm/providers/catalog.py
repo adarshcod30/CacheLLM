@@ -230,9 +230,9 @@ HOSTS: tuple[Host, ...] = (
         "OPENROUTER_API_KEY",
         None,
         (
-            "anthropic/claude-3.5-sonnet",
+            "anthropic/claude-haiku-4.5",
             "meta-llama/llama-3.1-8b-instruct",
-            "google/gemini-2.0-flash-exp",
+            "google/gemini-2.5-flash",
         ),
         "One key reaches hundreds of models. Ids contain a slash and are forwarded whole.",
     ),

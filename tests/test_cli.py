@@ -169,3 +169,44 @@ def test_invalidate_requires_a_target() -> None:
     result = runner.invoke(app, ["invalidate"])
     assert result.exit_code == 2
     assert "--namespace" in result.output
+
+
+def test_invalidate_clears_the_running_proxy_not_a_cache_of_its_own(live_proxy: str) -> None:
+    import httpx
+
+    send(live_proxy, "What is Redis used for?")
+    send(live_proxy, "What is Redis used for?")
+    result = runner.invoke(app, ["invalidate", "--all", "--url", live_proxy])
+    assert result.exit_code == 0, result.output
+    assert "removed" in result.output and "removed 0" not in result.output
+    send(live_proxy, "What is Redis used for?")
+    latest = httpx.get(f"{live_proxy}/admin/requests", params={"limit": 1}).json()["requests"]
+    assert latest[0]["status"] == "MISS", "the entry should really be gone"
+
+
+def test_invalidate_says_what_to_do_when_nothing_is_running() -> None:
+    result = runner.invoke(app, ["invalidate", "--all", "--url", f"http://127.0.0.1:{free_port()}"])
+    assert result.exit_code == 1
+    assert "No proxy answering" in result.output
+
+
+def test_tune_works_from_an_installed_package(tmp_path, monkeypatch) -> None:
+    """It imported from the repo's bench folder, which pip never installs."""
+    import json
+
+    monkeypatch.setenv("CACHELLM_EMBEDDING_BACKEND", "hash")
+    pairs = tmp_path / "pairs.jsonl"
+    pairs.write_text(
+        "\n".join(
+            json.dumps(p)
+            for p in (
+                {"a": "reset my password", "b": "how do I reset my password", "duplicate": True},
+                {"a": "enable 2FA", "b": "disable 2FA", "duplicate": False},
+            )
+        )
+    )
+    out = tmp_path / "sweep.json"
+    result = runner.invoke(app, ["tune", str(pairs), "--output", str(out)])
+    assert result.exit_code == 0, result.output
+    assert json.loads(out.read_text())["pairs"] == 2
+    assert "bench" not in __import__("cachellm.tuning").tuning.__name__

@@ -225,28 +225,36 @@ def invalidate(
     namespace: Annotated[str, typer.Option(help="Namespace hash to drop.")] = "",
     model: Annotated[str, typer.Option(help="Drop every entry for this model.")] = "",
     all_entries: Annotated[bool, typer.Option("--all", help="Drop the whole cache.")] = False,
+    url: Annotated[str, typer.Option(help="Proxy to clear.")] = "",
 ) -> None:
-    """Remove cache entries by namespace, model, or all of them."""
+    """Remove cache entries by namespace, model, or all of them.
+
+    Goes through the running proxy. With the in-memory store the cache lives
+    inside that process, and a command that built its own state used to clear
+    an empty cache of its own and report "removed 0" while the real one stayed
+    full.
+    """
     if not (namespace or model or all_entries):
         typer.secho("pass --namespace, --model or --all", fg="red")
         raise typer.Exit(2)
+    import httpx
 
-    async def run() -> None:
-        from cachellm.api.deps import build_state, shutdown_state
-
-        state = await build_state(get_settings())
-        try:
-            if state.cache is None:
-                typer.secho(f"cache unavailable: {state.degraded_reason}", fg="red")
-                raise typer.Exit(1)
-            removed = await state.cache.invalidate(
-                namespace=namespace or None, model=model or None, drop_all=all_entries
-            )
-            typer.echo(f"removed {removed} keys")
-        finally:
-            await shutdown_state(state)
-
-    asyncio.run(run())
+    target = _proxy_url(url)
+    settings = get_settings()
+    headers = {}
+    if keys := sorted(settings.client_keys):
+        headers["Authorization"] = f"Bearer {keys[0]}"
+    body = {"namespace": namespace or None, "model": model or None, "all": all_entries}
+    try:
+        response = httpx.post(f"{target}/admin/invalidate", json=body, headers=headers, timeout=10)
+    except httpx.HTTPError:
+        _not_running(target)
+        raise typer.Exit(1) from None
+    if response.status_code != 200:
+        typer.secho(f"The proxy refused: {response.text[:300]}", fg="red")
+        raise typer.Exit(1)
+    removed = response.json().get("removed_keys", 0)
+    typer.echo(f"removed {removed} {'entry' if removed == 1 else 'entries'}")
 
 
 @app.command()
@@ -257,7 +265,7 @@ def tune(
     ),
 ) -> None:
     """Sweep similarity thresholds against labelled prompt pairs."""
-    from bench.tune_threshold import run_sweep
+    from cachellm.tuning import run_sweep
 
     asyncio.run(run_sweep(pairs_file, output))
 
