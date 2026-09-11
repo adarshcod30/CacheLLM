@@ -2,7 +2,7 @@
   "name": "groq",
   "model": "openai/gpt-oss-20b",
   "detected": "Groq at https://api.groq.com/openai/v1 (GROQ_API_KEY is set)",
-  "run_at": "2026-09-10T23:13:01+00:00",
+  "run_at": "2026-09-11T00:28:31+00:00",
   "passed": true,
   "checks": [
     {
@@ -50,7 +50,11 @@
       "passed": true
     },
     {
-      "check": "token usage came back, so spend is counted",
+      "check": "token usage came back, streamed or not",
+      "passed": true
+    },
+    {
+      "check": "spend on misses is counted",
       "passed": true
     },
     {
@@ -69,11 +73,13 @@
       "stream": false,
       "status": 200,
       "cache": "MISS",
+      "upstream": "groq",
       "tier": "-",
       "similarity": "0.0000",
       "finish": "stop",
       "answer": "The capital of Finland is **Helsinki**.",
-      "ms": 897.5
+      "tokens": 120,
+      "ms": 609.8
     },
     "repeat": {
       "model": "openai/gpt-oss-20b",
@@ -81,11 +87,13 @@
       "stream": false,
       "status": 200,
       "cache": "HIT",
+      "upstream": "groq",
       "tier": "exact",
       "similarity": "1.0000",
       "finish": "stop",
       "answer": "The capital of Finland is **Helsinki**.",
-      "ms": 13.2
+      "tokens": 120,
+      "ms": 3.7
     },
     "reworded": {
       "model": "openai/gpt-oss-20b",
@@ -93,11 +101,13 @@
       "stream": false,
       "status": 200,
       "cache": "HIT",
+      "upstream": "groq",
       "tier": "semantic",
       "similarity": "0.9819",
       "finish": "stop",
       "answer": "The capital of Finland is **Helsinki**.",
-      "ms": 76.6
+      "tokens": 120,
+      "ms": 11.5
     },
     "other": {
       "model": "openai/gpt-oss-20b",
@@ -105,11 +115,13 @@
       "stream": false,
       "status": 200,
       "cache": "MISS",
+      "upstream": "groq",
       "tier": "-",
       "similarity": "0.6076",
       "finish": "stop",
       "answer": "The capital of Sweden is **Stockholm**.",
-      "ms": 488.0
+      "tokens": 119,
+      "ms": 463.0
     },
     "stream": {
       "model": "openai/gpt-oss-20b",
@@ -117,11 +129,13 @@
       "stream": true,
       "status": 200,
       "cache": "MISS",
+      "upstream": "groq",
       "tier": "-",
       "similarity": "0.0257",
       "finish": "stop",
       "answer": "The HTTP status code\u202f404 means that the server could not find the requested resource.",
-      "ms": 454.4
+      "tokens": 168,
+      "ms": 503.0
     },
     "stream_again": {
       "model": "openai/gpt-oss-20b",
@@ -129,11 +143,13 @@
       "stream": true,
       "status": 200,
       "cache": "HIT",
+      "upstream": "groq",
       "tier": "exact",
       "similarity": "1.0000",
       "finish": "stop",
       "answer": "The HTTP status code\u202f404 means that the server could not find the requested resource.",
-      "ms": 10.0
+      "tokens": 168,
+      "ms": 4.7
     },
     "hot": {
       "model": "openai/gpt-oss-20b",
@@ -141,11 +157,13 @@
       "stream": false,
       "status": 200,
       "cache": "BYPASS",
+      "upstream": "groq",
       "tier": "-",
       "similarity": "-",
       "finish": "stop",
       "answer": "The capital of Finland is **Helsinki**.",
-      "ms": 523.7
+      "tokens": 119,
+      "ms": 526.0
     },
     "bad_model": {
       "model": "no-such-model-cachellm",
@@ -157,7 +175,9 @@
       "similarity": "-",
       "finish": "error",
       "answer": "Error code: 404 - {'error': {'message': 'Upstream returned 404: {\"error\":{\"message\":\"The model `no-such-model-cachellm` does not exist or you do not have access to it.\",\"type\":\"invalid_request_error\",\"code\":\"model_not_found\"}}\\n', 'type': 'api_error', 'param': None, 'code': 'upstream_error'}}",
-      "ms": 86.0
+      "tokens": 0,
+      "upstream": "-",
+      "ms": 58.9
     },
     "bad_model_stream": {
       "model": "no-such-model-cachellm",
@@ -169,7 +189,9 @@
       "similarity": "-",
       "finish": "error",
       "answer": "Error code: 404 - {'error': {'message': 'Upstream returned 404: {\"error\":{\"message\":\"The model `no-such-model-cachellm` does not exist or you do not have access to it.\",\"type\":\"invalid_request_error\",\"code\":\"model_not_found\"}}\\n', 'type': 'api_error', 'param': None, 'code': 'upstream_error'}}",
-      "ms": 83.5
+      "tokens": 0,
+      "upstream": "-",
+      "ms": 56.0
     },
     "also0": {
       "model": "openai/gpt-oss-120b",
@@ -177,11 +199,13 @@
       "stream": false,
       "status": 200,
       "cache": "MISS",
+      "upstream": "groq",
       "tier": "-",
       "similarity": "0.0000",
       "finish": "stop",
       "answer": "The capital of Finland is **Helsinki**.",
-      "ms": 501.2
+      "tokens": 121,
+      "ms": 565.8
     },
     "also0_again": {
       "model": "openai/gpt-oss-120b",
@@ -189,11 +213,13 @@
       "stream": false,
       "status": 200,
       "cache": "HIT",
+      "upstream": "groq",
       "tier": "exact",
       "similarity": "1.0000",
       "finish": "stop",
       "answer": "The capital of Finland is **Helsinki**.",
-      "ms": 12.3
+      "tokens": 121,
+      "ms": 3.6
     }
   },
   "spent_usd": 0.00012352,

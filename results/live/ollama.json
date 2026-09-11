@@ -1,8 +1,8 @@
 {
-  "name": "gemini",
-  "model": "gemini-2.5-flash",
-  "detected": "Google Gemini at https://generativelanguage.googleapis.com/v1beta/openai/ (GEMINI_API_KEY is set)",
-  "run_at": "2026-09-11T00:28:26+00:00",
+  "name": "ollama",
+  "model": "qwen2.5:0.5b",
+  "detected": "Ollama, on this machine at http://localhost:11434/v1 (running on this machine)",
+  "run_at": "2026-09-11T00:22:10+00:00",
   "passed": true,
   "checks": [
     {
@@ -54,116 +54,101 @@
       "passed": true
     },
     {
-      "check": "spend on misses is counted",
-      "passed": true
-    },
-    {
-      "check": "the API key never appears in the proxy log",
-      "passed": true
-    },
-    {
-      "check": "models/gemini-3.5-flash answers and then hits",
+      "check": "a local model counts as free",
       "passed": true
     }
   ],
   "requests": {
     "first": {
-      "model": "gemini-2.5-flash",
+      "model": "qwen2.5:0.5b",
       "question": "What is the capital of Finland?",
       "stream": false,
       "status": 200,
       "cache": "MISS",
-      "upstream": "gemini",
       "tier": "-",
       "similarity": "0.0000",
       "finish": "stop",
-      "answer": "The capital of Finland is **Helsinki**.",
-      "tokens": 18,
-      "ms": 1448.0
+      "answer": "The capital of Finland is Helsinki.",
+      "tokens": 44,
+      "ms": 1240.2
     },
     "repeat": {
-      "model": "gemini-2.5-flash",
+      "model": "qwen2.5:0.5b",
       "question": "What is the capital of Finland?",
       "stream": false,
       "status": 200,
       "cache": "HIT",
-      "upstream": "gemini",
       "tier": "exact",
       "similarity": "1.0000",
       "finish": "stop",
-      "answer": "The capital of Finland is **Helsinki**.",
-      "tokens": 18,
-      "ms": 1.8
+      "answer": "The capital of Finland is Helsinki.",
+      "tokens": 44,
+      "ms": 3.7
     },
     "reworded": {
-      "model": "gemini-2.5-flash",
+      "model": "qwen2.5:0.5b",
       "question": "Which city is the capital of Finland?",
       "stream": false,
       "status": 200,
       "cache": "HIT",
-      "upstream": "gemini",
       "tier": "semantic",
       "similarity": "0.9819",
       "finish": "stop",
-      "answer": "The capital of Finland is **Helsinki**.",
-      "tokens": 18,
-      "ms": 7.7
+      "answer": "The capital of Finland is Helsinki.",
+      "tokens": 44,
+      "ms": 10.9
     },
     "other": {
-      "model": "gemini-2.5-flash",
+      "model": "qwen2.5:0.5b",
       "question": "What is the capital of Sweden?",
       "stream": false,
       "status": 200,
       "cache": "MISS",
-      "upstream": "gemini",
       "tier": "-",
       "similarity": "0.6076",
       "finish": "stop",
-      "answer": "The capital of Sweden is **Stockholm**.",
-      "tokens": 17,
-      "ms": 1272.0
+      "answer": "The capital of Sweden is Stockholm.",
+      "tokens": 44,
+      "ms": 155.0
     },
     "stream": {
-      "model": "gemini-2.5-flash",
+      "model": "qwen2.5:0.5b",
       "question": "In one sentence, what does the HTTP status code 404 mean?",
       "stream": true,
       "status": 200,
       "cache": "MISS",
-      "upstream": "gemini",
       "tier": "-",
       "similarity": "0.0257",
       "finish": "stop",
-      "answer": "The HTTP status code 404 Not Found indicates that the server could not find the requested resource.",
-      "tokens": 38,
-      "ms": 1814.9
+      "answer": "An HTTP status code of 404 indicates that the requested resource was not found on the server.",
+      "tokens": 67,
+      "ms": 162.4
     },
     "stream_again": {
-      "model": "gemini-2.5-flash",
+      "model": "qwen2.5:0.5b",
       "question": "In one sentence, what does the HTTP status code 404 mean?",
       "stream": true,
       "status": 200,
       "cache": "HIT",
-      "upstream": "gemini",
       "tier": "exact",
       "similarity": "1.0000",
       "finish": "stop",
-      "answer": "The HTTP status code 404 Not Found indicates that the server could not find the requested resource.",
-      "tokens": 38,
-      "ms": 1.9
+      "answer": "An HTTP status code of 404 indicates that the requested resource was not found on the server.",
+      "tokens": 67,
+      "ms": 4.0
     },
     "hot": {
-      "model": "gemini-2.5-flash",
+      "model": "qwen2.5:0.5b",
       "question": "What is the capital of Finland?",
       "stream": false,
       "status": 200,
       "cache": "BYPASS",
-      "upstream": "gemini",
       "tier": "-",
       "similarity": "-",
       "finish": "stop",
-      "answer": "The capital of Finland is **Helsinki**.",
-      "tokens": 18,
-      "ms": 1706.8
+      "answer": "The capital of Finland is Helsinki.",
+      "tokens": 44,
+      "ms": 68.2
     },
     "bad_model": {
       "model": "no-such-model-cachellm",
@@ -174,10 +159,9 @@
       "tier": "-",
       "similarity": "-",
       "finish": "error",
-      "answer": "Error code: 404 - {'error': {'message': 'Upstream returned 404: [{\\n  \"error\": {\\n    \"code\": 404,\\n    \"message\": \"models/no-such-model-cachellm is not found for API version v1main, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their s",
+      "answer": "Error code: 404 - {'error': {'message': 'Upstream returned 404: {\"error\":{\"message\":\"model \\'no-such-model-cachellm\\' not found\",\"type\":\"not_found_error\",\"param\":null,\"code\":null}}\\n', 'type': 'api_error', 'param': None, 'code': 'upstream_error'}}",
       "tokens": 0,
-      "upstream": "-",
-      "ms": 367.8
+      "ms": 5.3
     },
     "bad_model_stream": {
       "model": "no-such-model-cachellm",
@@ -188,40 +172,11 @@
       "tier": "-",
       "similarity": "-",
       "finish": "error",
-      "answer": "Error code: 404 - {'error': {'message': 'Upstream returned 404: [{\\n  \"error\": {\\n    \"code\": 404,\\n    \"message\": \"models/no-such-model-cachellm is not found for API version v1main, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their s",
+      "answer": "Error code: 404 - {'error': {'message': 'Upstream returned 404: {\"error\":{\"message\":\"model \\'no-such-model-cachellm\\' not found\",\"type\":\"not_found_error\",\"param\":null,\"code\":null}}\\n', 'type': 'api_error', 'param': None, 'code': 'upstream_error'}}",
       "tokens": 0,
-      "upstream": "-",
-      "ms": 323.3
-    },
-    "also0": {
-      "model": "models/gemini-3.5-flash",
-      "question": "What is the capital of Finland?",
-      "stream": false,
-      "status": 200,
-      "cache": "MISS",
-      "upstream": "gemini",
-      "tier": "-",
-      "similarity": "0.0000",
-      "finish": "stop",
-      "answer": "The capital of Finland is **Helsinki**.",
-      "tokens": 18,
-      "ms": 1212.9
-    },
-    "also0_again": {
-      "model": "models/gemini-3.5-flash",
-      "question": "What is the capital of Finland?",
-      "stream": false,
-      "status": 200,
-      "cache": "HIT",
-      "upstream": "gemini",
-      "tier": "exact",
-      "similarity": "1.0000",
-      "finish": "stop",
-      "answer": "The capital of Finland is **Helsinki**.",
-      "tokens": 18,
-      "ms": 1.1
+      "ms": 3.1
     }
   },
-  "spent_usd": 0.0002393,
-  "saved_usd": 0.0002144
+  "spent_usd": 0.0,
+  "saved_usd": 0.0
 }

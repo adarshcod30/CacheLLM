@@ -72,14 +72,14 @@ them. This is the single most important thing measuring produced.
 Six models, each scored at the highest threshold that served **zero** hard
 negatives, and the recall available there:
 
-| Model | Dim | Embed ms, short probe | Mean duplicate score | Worst hard negative | Separation | Safe threshold | Recall there |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `sentence-transformers/all-MiniLM-L6-v2` | 384 | 5.7 | 0.795 | 0.886 | -0.091 | **0.89** | **35.0%** |
-| `thenlper/gte-base` | 768 | 20.6 | 0.930 | 0.955 | -0.026 | 0.96 | 26.0% |
-| `jinaai/jina-embeddings-v2-small-en` | 512 | 1.9 | 0.908 | 0.959 | -0.051 | 0.96 | 16.3% |
-| `BAAI/bge-base-en-v1.5` | 768 | 8.9 | 0.858 | 0.937 | -0.080 | 0.94 | 11.4% |
-| `snowflake/snowflake-arctic-embed-s` | 384 | 3.2 | 0.925 | 0.972 | -0.047 | 0.98 | 11.4% |
-| `BAAI/bge-small-en-v1.5` | 384 | 3.8 | 0.871 | 0.952 | -0.081 | 0.96 | 8.1% |
+| Model | Dim | Embed ms p50 | Embed ms p95 | Mean duplicate score | Worst hard negative | Separation | Safe threshold | Recall there |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `sentence-transformers/all-MiniLM-L6-v2` | 384 | 5.5 | 6.0 | 0.795 | 0.886 | -0.091 | **0.89** | **35.0%** |
+| `thenlper/gte-base` | 768 | 20.7 | 23.7 | 0.930 | 0.955 | -0.026 | 0.96 | 26.0% |
+| `jinaai/jina-embeddings-v2-small-en` | 512 | 1.7 | 2.0 | 0.908 | 0.959 | -0.051 | 0.96 | 16.3% |
+| `BAAI/bge-base-en-v1.5` | 768 | 7.5 | 10.0 | 0.858 | 0.937 | -0.080 | 0.94 | 11.4% |
+| `snowflake/snowflake-arctic-embed-s` | 384 | 2.7 | 3.2 | 0.925 | 0.972 | -0.047 | 0.98 | 11.4% |
+| `BAAI/bge-small-en-v1.5` | 384 | 3.0 | 4.0 | 0.871 | 0.952 | -0.081 | 0.96 | 8.1% |
 
 Two things fall out.
 
@@ -98,16 +98,16 @@ MiniLM won on the metric that matters and gives 4x the safe recall of
 bge-small, for a slightly larger download: 86 MB against 63 MB for the
 quantized bge-small that fastembed fetches. It is the default.
 
-**Read the embed column as a ranking, not a price.** It timed twenty synthetic
-strings such as `latency probe 1234.5` on a quiet machine and took the mean.
-Real questions cost more. In the Bedrock load test below, reworded hits, which
-include embedding the new wording, took 3.5 ms at the median and 9.7 ms at p95
-end to end. Embedding time also grows with prompt length and with CPU
-contention: timed again on the same Mac while six unrelated processes held its
-cores, the corpus questions took about 9 ms at the median and 30-word questions
-about 20 ms. `bench/compare_models.py` now times the corpus's own questions with
-the embedding cache off and reports the median and p95. Rerun it on a quiet
-machine before quoting a figure from it.
+**How the embed columns were timed.** Each model embedded the corpus's own 157
+questions one call at a time with its cache off, three times over, on an Apple
+M4, and the quietest round is reported, because background load only ever adds
+time. The machine's load average is saved with the results in
+`results/model_comparison.json`. An earlier version of this table timed twenty
+short synthetic strings instead, and for MiniLM it landed within a quarter of a
+millisecond of these figures, so that shortcut had not flattered it. Load
+matters far more than method: with six unrelated processes holding the CPU, the
+same MiniLM questions took about 9 ms at the median, and a 30-word question
+about 20 ms.
 
 ## Finding 3: a lexical guard does not rescue it
 
@@ -252,35 +252,69 @@ almost every production application has one anyway.
 ## Live provider checks
 
 The load test proves the cache against one real provider. These runs prove the
-adapter against two more. Every request goes through a real proxy to the real
-service, driven by the official OpenAI SDK, and the key is found by
-auto-detection exactly as it would be on anyone else's machine. Run on
-2026-09-11.
+adapter against three more. Every request goes through a real proxy to the real
+service, driven by the official OpenAI SDK, and the host is found by
+auto-detection exactly as it would be on anyone else's machine: from its key,
+or for Ollama, because it is running. Run on 2026-09-11, on version 0.3.0.
 
-| | Google Gemini | Groq |
-| --- | --- | --- |
-| Models | `gemini-2.5-flash`, `models/gemini-3.5-flash` | `openai/gpt-oss-20b`, `openai/gpt-oss-120b` |
-| Found through | `GEMINI_API_KEY` | `GROQ_API_KEY` |
-| Checks passed | **14 of 14** | **14 of 14** |
-| Reworded question | scored 0.982, served from cache | scored 0.982, served from cache |
-| Sweden asked after Finland | scored 0.608, correctly not served | scored 0.608, correctly not served |
-| Real spend for the whole run | $0.00023 | $0.00012 |
+| | Google Gemini | Groq | Ollama, on this Mac |
+| --- | --- | --- | --- |
+| Models | `gemini-2.5-flash`, `models/gemini-3.5-flash` | `openai/gpt-oss-20b`, `openai/gpt-oss-120b` | `qwen2.5:0.5b` |
+| Found through | `GEMINI_API_KEY` | `GROQ_API_KEY` | a running server |
+| Checks passed | **15 of 15** | **15 of 15** | **13 of 13** |
+| Reworded question | scored 0.982, served from cache | scored 0.982, served from cache | scored 0.982, served from cache |
+| Sweden asked after Finland | scored 0.608, correctly not served | scored 0.608, correctly not served | scored 0.608, correctly not served |
+| Real spend for the whole run | $0.00024 | $0.00012 | $0, counted as free |
 
 Each run asks a first question, the same question again, a rewording, a
 different country, a stream and its repeat, a hot temperature, and an unknown
 model both plain and streamed, then asks each extra model twice. It passes only
 if every request behaves as designed, the replayed stream matches the original
-character for character, token usage comes back so spend is counted, and the
-key never appears in the proxy's log. The raw results are in
-[`results/live/`](../results/live/). Rerun one with your own key:
+character for character, token usage comes back, spend is counted for a paid
+host and not for a local one, and the key never appears in the proxy's log.
+Ollama needs no key, so it has one check fewer, and no second model. The raw
+results are in [`results/live/`](../results/live/). Rerun one with your own key:
 
 ```bash
 GROQ_API_KEY=gsk_... uv run python bench/live_check.py \
   --var GROQ_API_KEY --model openai/gpt-oss-20b --name groq
 ```
 
-The machine was busy with unrelated work during these runs, so their timings
-are not benchmarks. The load test above is the latency measurement.
+### All three through one proxy
+
+The same machine then ran one proxy holding both keys, with Ollama running,
+and sent five models to it. Each had to reach its own host, cache there, and
+never be served another host's answer. **11 of 11 checks passed.**
+
+| Sent | Answered by | Why the router chose it |
+| --- | --- | --- |
+| `gemini-2.5-flash` | Google Gemini | listed by Gemini at startup |
+| `models/gemini-3.5-flash-lite` | Google Gemini | listed by Gemini at startup |
+| `openai/gpt-oss-20b` | Groq | listed by Groq at startup |
+| `groq/openai/gpt-oss-120b` | Groq, as `openai/gpt-oss-120b` | the `groq/` host prefix |
+| `qwen2.5:0.5b` | Ollama | listed by Ollama at startup |
+
+At startup the proxy read 55 model ids from Gemini, 14 from Groq and 1 from
+Ollama. Every first request missed and every repeat hit the cache of the host
+that answered it, and `mistral/mistral-large-latest` was refused with a message
+naming `MISTRAL_API_KEY` rather than being sent to some other host.
+
+```bash
+uv run python -m bench.live_routing --key GEMINI_API_KEY --key GROQ_API_KEY \
+  --expect gemini-2.5-flash=gemini --expect openai/gpt-oss-20b=groq \
+  --expect qwen2.5:0.5b=ollama
+```
+
+The first attempt at this run failed twice, and both failures were the hosts'
+own rules rather than routing mistakes. Gemini lists `gemini-2.5-flash-lite`
+and `gemini-2.5-pro`, but refuses both with "no longer available to new users".
+Groq refused `qwen/qwen3.6-27b` on its free tier as too large, because it counts
+the maximum possible answer against a per-minute token limit. A model a host
+lists is not always one your account may use, so the catalog now suggests
+models that answered.
+
+The machine was busy with unrelated work during some of these runs, so their
+timings are not benchmarks. The load test above is the latency measurement.
 
 **What the live runs found that 301 passing tests had not:**
 

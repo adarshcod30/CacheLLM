@@ -3,7 +3,7 @@
 [![CI](https://github.com/adarshcod30/CacheLLM/actions/workflows/ci.yml/badge.svg)](https://github.com/adarshcod30/CacheLLM/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-327%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-356%20passing-brightgreen)](tests/)
 [![PyPI](https://img.shields.io/pypi/v/cachellm-proxy)](https://pypi.org/project/cachellm-proxy/)
 [![Hit rate](https://img.shields.io/badge/hit%20rate-77%25%20on%20Bedrock-orange)](docs/evaluation.md)
 
@@ -32,7 +32,7 @@ A normal cache does not help. Change one letter and the key misses, so exact-mat
 CacheLLM caches by **meaning**. It embeds each prompt, searches for the nearest answer it has already paid for, and serves it when the match is close enough. Your application changes one line:
 
 ```python
-client = OpenAI(base_url="http://localhost:8080/v1")   # was https://api.openai.com/v1
+client = OpenAI(base_url="http://localhost:8080/v1")  # was https://api.openai.com/v1
 ```
 
 Everything else stays the same: same request shape, same response shape, same errors, same streaming. Responses carry `X-Cache` headers so you can see exactly what happened.
@@ -64,13 +64,14 @@ The same benchmark runs without any cloud credentials against the built-in fake 
 | Feature | What it does | Why it exists |
 | --- | --- | --- |
 | **Drop-in OpenAI API** | Same request and response shape, streaming included, verified against the official `openai` Python SDK in CI | Adoption has to cost one line, or nobody adopts it |
+| **Several providers at once** | One proxy routes each model to the host that serves it, using each host's live model list: Gemini, Groq, OpenAI, Claude, Grok, Ollama and more, found from the keys you already have | Real apps mix models from different vendors, and one cache in front of all of them should not need one proxy per vendor |
 | **Runs with nothing installed** | Defaults to an in-process numpy store; uses Redis automatically when it can reach one | A cache you have to provision a server for does not get tried. Redis takes over when you actually need shared, durable state |
 | **Two-tier cache** | Exact-match tier answers literal repeats in about a millisecond without embedding; semantic tier handles rewording | 82% of hits came from the exact tier: free, fast and impossible to get semantically wrong |
 | **Per-model threshold calibration** | Ships measured safe thresholds for six embedding models and picks the right one automatically | Measured safe thresholds span 0.89 to 0.98. A threshold copied between models is a guess |
 | **Cacheability policy** | Classifies every prompt and decides cacheable, category, TTL | Creative writing, live data and personal questions must not be cached like a fact |
 | **Personal-data guard** | Refuses to store prompts containing emails, long digit runs, API keys or "my order" phrasing | Serving one user's answer to another is the failure that gets a cache torn out |
 | **Shadow mode** | Logs what the cache would have served, then calls the provider anyway | Lets a team watch it on real traffic for a week before trusting it |
-| **Namespace isolation** | System prompt, model, provider, temperature and max tokens all fold into the cache key | Two features sharing a proxy must never share answers |
+| **Namespace isolation** | System prompt, model, host, temperature and max tokens all fold into the cache key | Two features sharing a proxy must never share answers |
 | **Targeted invalidation** | Drop a namespace or a model with one call, backed by an index lookup rather than a keyspace scan | "The system prompt changed" and "we upgraded the model" are routine events |
 | **Stampede protection** | Identical concurrent misses collapse into a single upstream call | Ten users asking one new question should cost one generation, not ten |
 | **Streaming both ways** | Misses stream through while buffering; hits replay as a stream | A cached answer must not break a client that asked for a stream |
@@ -111,39 +112,41 @@ flowchart TB
         Auth["Auth + policy<br/>cacheable? category? TTL?"]
         L1["Tier 1: exact match<br/>normalised hash"]
         Embed["Embedder<br/>MiniLM ONNX, in process"]
-        L2["Tier 2: semantic search<br/>HNSW, cosine, namespace filtered"]
+        L2["Tier 2: semantic search<br/>cosine, namespace filtered"]
         Flight["Single-flight<br/>stampede guard"]
-        Router["Provider router"]
+        Router["Router<br/>model lists, host prefixes, names"]
         Auth --> L1 --> Embed --> L2 --> Flight --> Router
     end
 
-    subgraph Redis["Redis 8"]
-        Keys["Exact keys<br/>hash to entry id"]
-        Index["Vector index<br/>entry + embedding + TTL"]
-        Stats["Counters and<br/>near-miss log"]
+    subgraph Store["Cache store: one of"]
+        Memory["In memory<br/>numpy matrix, the default"]
+        Redis["Redis 8<br/>shared by every copy"]
     end
 
-    subgraph Providers["Upstream models"]
-        Bedrock["AWS Bedrock<br/>Nova, Claude, Llama, Mistral"]
-        OpenAICompat["OpenAI-compatible<br/>OpenAI, Groq, vLLM, Together"]
+    subgraph Providers["Hosts, several at once"]
+        Bedrock["AWS Bedrock<br/>Nova, Claude, Llama"]
+        Hosted["OpenAI-compatible hosts<br/>OpenAI, Gemini, Groq, Claude, Grok"]
+        Local["On your machine<br/>Ollama, vLLM, LM Studio"]
     end
 
-    subgraph Obs["Observability"]
-        Prom["Prometheus"]
-        Graf["Grafana"]
-        Otel["OpenTelemetry<br/>to Langfuse or Tempo"]
+    subgraph Obs["Seeing what it did"]
+        Term["cachellm stats<br/>in the terminal"]
+        Prom["Prometheus, optional"]
+        Otel["OpenTelemetry, optional<br/>to Langfuse or Tempo"]
     end
 
     App -->|"POST /v1/chat/completions"| Auth
-    Proxy -.-> Redis
+    Proxy -.-> Store
     Router --> Bedrock
-    Router --> OpenAICompat
-    Proxy -->|"/metrics"| Prom --> Graf
+    Router --> Hosted
+    Router --> Local
+    Proxy -->|"/admin/requests"| Term
+    Proxy -->|"/metrics"| Prom
     Proxy -.->|"spans"| Otel
     Proxy -->|"response + X-Cache headers"| App
 ```
 
-**In plain language.** Your app talks to CacheLLM exactly as it would talk to OpenAI. The proxy first decides whether this request may be cached at all. If it may, it tries a cheap exact-match lookup. Failing that, it embeds the prompt locally and asks Redis for the nearest answer it has already paid for, but only among answers allowed to serve this system prompt and model. If nothing is close enough, it forwards to the real provider, streams the answer back, and stores it for next time. Every step increments a metric, so hit rate and money saved are visible live.
+**In plain language.** Your app talks to CacheLLM exactly as it would talk to OpenAI. The proxy first decides whether this request may be cached at all. If it may, it tries a cheap exact-match lookup. Failing that, it embeds the prompt locally and asks its store, memory by default or Redis, for the nearest answer it has already paid for, but only among answers allowed to serve this system prompt, model and host. If nothing is close enough, it forwards to whichever host serves that model, streams the answer back, and stores it for next time. Every request lands in a log that `cachellm stats` reads, so hit rate and money saved are visible live.
 
 ### Request flow
 
@@ -153,8 +156,8 @@ sequenceDiagram
     participant C as Client
     participant P as CacheLLM
     participant E as Embedder
-    participant R as Redis
-    participant M as Provider
+    participant R as Store, memory or Redis
+    participant M as The host that serves the model
 
     C->>P: POST /v1/chat/completions
     P->>P: Cacheable? Temperature, tools, JSON mode,<br/>multi-turn, personal data
@@ -167,7 +170,7 @@ sequenceDiagram
             R-->>P: Stored answer
             P-->>C: Response in about 1 ms, X-Cache: HIT (exact)
         else No exact match
-            P->>E: Embed prompt (about 6 ms)
+            P->>E: Embed prompt (about 5 ms)
             E-->>P: 384-dim unit vector
             P->>R: KNN inside this namespace
             R-->>P: Nearest neighbours with scores
@@ -208,16 +211,16 @@ This is where a caching project usually hand-waves. The full write-up is in [doc
 
 **Result 2: thresholds do not transfer between models.** The safe threshold ranges from 0.89 for MiniLM to 0.98 for Arctic-embed. Every model tested had negative separation, meaning the mean duplicate score sat below the worst hard negative. Bigger and slower did not fix it.
 
-| Model | Safe threshold | Recall there | Embed ms, short probe |
+| Model | Safe threshold | Recall there | Embed ms p50 |
 | --- | ---: | ---: | ---: |
-| `all-MiniLM-L6-v2` | **0.89** | **35.0%** | 5.7 |
-| `gte-base` | 0.96 | 26.0% | 20.6 |
-| `jina-embeddings-v2-small-en` | 0.96 | 16.3% | 1.9 |
-| `bge-base-en-v1.5` | 0.94 | 11.4% | 8.9 |
-| `snowflake-arctic-embed-s` | 0.98 | 11.4% | 3.2 |
-| `bge-small-en-v1.5` | 0.96 | 8.1% | 3.8 |
+| `all-MiniLM-L6-v2` | **0.89** | **35.0%** | 5.5 |
+| `gte-base` | 0.96 | 26.0% | 20.7 |
+| `jina-embeddings-v2-small-en` | 0.96 | 16.3% | 1.7 |
+| `bge-base-en-v1.5` | 0.94 | 11.4% | 7.5 |
+| `snowflake-arctic-embed-s` | 0.98 | 11.4% | 2.7 |
+| `bge-small-en-v1.5` | 0.96 | 8.1% | 3.0 |
 
-MiniLM gives four times the safe recall of bge-small, for a slightly larger download of 86 MB against 63 MB, so it is the default. The embed column is a ranking from short synthetic strings, not what a real question costs. The load test measures that directly. The whole table ships in code as `CALIBRATED_THRESHOLDS`, and the proxy warns at startup if you configure a model it has never measured.
+MiniLM gives four times the safe recall of bge-small, for a slightly larger download of 86 MB against 63 MB, so it is the default. Embed times are the median for one real question on an Apple M4, with the cache off. The whole table ships in code as `CALIBRATED_THRESHOLDS`, and the proxy warns at startup if you configure a model it has never measured.
 
 **Result 3, a negative one: a lexical guard does not rescue it.** The obvious fix is to require matched prompts to share content words. Measured, hard negatives have *higher* token overlap (0.42 mean) than genuine paraphrases share vocabulary, because they differ by exactly one decisive word. The guard rejects good matches and keeps dangerous ones. It was measured and dropped rather than shipped.
 
@@ -312,28 +315,31 @@ make tune && make compare-models && make bench
 
 ### Using a real provider
 
-One environment variable per host. Everything except Bedrock speaks the OpenAI protocol, so a single adapter covers all of it and needs no extra.
+Export the key your provider gave you, under its usual name, and start the proxy. It reads every key it recognises at startup, so you can use several providers at once, and everything except Bedrock speaks the OpenAI protocol, so no extra is needed.
 
-| Host | `CACHELLM_OPENAI_BASE_URL` | Example model |
+| Host | Key it reads | Example model |
 | --- | --- | --- |
-| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
-| Groq | `https://api.groq.com/openai/v1` | `openai/gpt-oss-20b` |
-| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai/` | `gemini-2.5-flash` |
-| Anthropic | `https://api.anthropic.com/v1` | `claude-haiku-4-5` |
-| OpenRouter | `https://openrouter.ai/api/v1` | `anthropic/claude-3.5-sonnet` |
-| Together | `https://api.together.xyz/v1` | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
-| Ollama, local | `http://localhost:11434/v1` | `llama3.2` |
-| vLLM or LM Studio | `http://localhost:8000/v1` | whatever you served |
+| OpenAI | `OPENAI_API_KEY` | `gpt-5.6-luna` |
+| Google Gemini | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `gemini-2.5-flash` |
+| Groq | `GROQ_API_KEY` | `openai/gpt-oss-20b` |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-haiku-4-5` |
+| xAI | `XAI_API_KEY` | `grok-4.6` |
+| OpenRouter | `OPENROUTER_API_KEY` | `anthropic/claude-3.5-sonnet` |
+| Together | `TOGETHER_API_KEY` | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |
+| Ollama, on your machine | none, found when it is running | `qwen2.5:0.5b` |
+
+`cachellm providers` lists all seventeen, with each one's base URL.
 
 ```bash
-CACHELLM_OPENAI_BASE_URL=https://api.groq.com/openai/v1 \
-CACHELLM_OPENAI_API_KEY=gsk_your_key \
+export GROQ_API_KEY=gsk_your_key
 cachellm serve
 ```
 
-If the key is already in its usual variable, such as `GROQ_API_KEY` or `GEMINI_API_KEY`, you can skip both lines: the proxy finds it at startup and says which host it picked.
+For a server of your own, such as vLLM, LM Studio or a company gateway, set the endpoint yourself. Then every request goes there, whatever other keys are exported:
 
-**Checked live, not just in tests.** On 2026-09-11 the proxy was run against real **Google Gemini** (`gemini-2.5-flash`, `gemini-3.5-flash`) and **Groq** (`openai/gpt-oss-20b`, `openai/gpt-oss-120b`), driven by the official OpenAI SDK, alongside the AWS Bedrock benchmark. Each run covers a miss, an exact hit, a reworded hit, a similar question that must not hit, a stream and its replay, a hot-temperature bypass and an unknown model's error, and checks that the API key never reaches the log. Results are in [docs/evaluation.md](docs/evaluation.md#live-provider-checks), and `bench/live_check.py` reruns them with your own key. The other hosts share the same adapter and its tests, but have not yet been run against the real service.
+```bash
+CACHELLM_OPENAI_BASE_URL=http://localhost:8000/v1 cachellm serve
+```
 
 **AWS Bedrock** is the one exception, because it does not speak the OpenAI protocol. It needs the `aws` extra, and then uses your existing AWS credentials with no vendor API key at all:
 
@@ -348,22 +354,43 @@ curl -s http://localhost:8080/v1/chat/completions -H 'Content-Type: application/
 
 If your credentials come from `aws login` rather than static keys or an SSO profile, that provider needs the CRT extra, which the `aws` extra already includes. The proxy detects that case and says so in the error rather than passing along boto's version of the message.
 
-### How a model name gets routed
+### Several providers at once
 
-Three rules, in order. You never configure a model list.
+With keys for more than one host, one proxy serves all of them, and each request goes to the host that serves its model. This table is from a live run with `GEMINI_API_KEY` and `GROQ_API_KEY` exported and Ollama running, all through a single proxy:
 
-1. **An explicit prefix** this proxy owns: `bedrock/…`, `openai/…`, `fake/…`.
-2. **A recognisable vendor convention.** Bedrock ids are always `vendor.model`, so `amazon.nova-lite-v1:0` and `us.anthropic.claude-3-haiku-20240307-v1:0` are identified with no prefix. OpenAI's own families (`gpt-`, `o1`, `o3`, `text-embedding-`) are identified the same way, whatever the default is.
-3. **Otherwise the configured default**, which is the OpenAI-compatible adapter. Names like `llama3.2`, `mixtral-8x7b-32768` and `qwen2.5-coder:7b` are served by Groq, Ollama, Together and OpenRouter alike, so the endpoint you configured is the only sensible answer.
+| Your app sends | Answered by | Because |
+| --- | --- | --- |
+| `gemini-2.5-flash` | Google Gemini | Gemini lists it |
+| `models/gemini-3.5-flash-lite` | Google Gemini | Gemini lists it |
+| `openai/gpt-oss-20b` | Groq | Groq lists it |
+| `groq/openai/gpt-oss-120b` | Groq, as `openai/gpt-oss-120b` | an explicit host prefix |
+| `qwen2.5:0.5b` | Ollama | Ollama lists it |
+| `mistral/mistral-large-latest` | nobody, with an error naming `MISTRAL_API_KEY` | no key for that host |
 
-Model ids that legitimately contain a slash, which OpenRouter and Together both use, are forwarded whole. Only this proxy's own prefixes are stripped, and `openai/` only when the upstream is OpenAI itself: Groq, OpenRouter and Together name OpenAI's models `openai/gpt-oss-120b`, so to them the prefix is part of the id. Note that `anthropic.claude-…` with a dot is a Bedrock id while `anthropic/claude-…` with a slash is an OpenRouter id, and the router tells them apart.
+Six rules decide, in order, and you never write a model list:
 
-Ask it directly if you are unsure:
+1. **`bedrock/` and `fake/`** pick the adapters this proxy owns.
+2. **Bedrock's `vendor.model` ids**, like `amazon.nova-lite-v1:0`, go to Bedrock.
+3. **A host's own model list.** At startup the proxy asks every host for its `/models`, so a name goes to the host that actually serves it. This is what sends `openai/gpt-oss-20b` to Groq. Lists refresh in the background when an unknown name turns up and they are over ten minutes old.
+4. **A host prefix**, LiteLLM style: `groq/openai/gpt-oss-120b` sends `openai/gpt-oss-120b` to Groq.
+5. **Naming conventions**: `claude-` for Anthropic, `gemini-` for Gemini, `grok-` for xAI, plus DeepSeek, Mistral, Perplexity and Moonshot names, when you have that host's key.
+6. **Everything else** goes to the default host, which is the first one found.
+
+Choose the hosts, and the default, with `CACHELLM_HOSTS`. The first one named is the default:
 
 ```bash
-curl -s localhost:8080/admin/route/meta-llama/Llama-3.3-70B-Instruct-Turbo
-curl -s localhost:8080/admin/providers
+CACHELLM_HOSTS=groq,gemini cachellm serve
 ```
+
+Check where any name would go while the proxy runs:
+
+```bash
+cachellm route openai/gpt-oss-20b
+```
+
+Answers are cached per host, so one host's answer is never served for another, and every response says who answered in its `X-Cache-Upstream` header. Models on your own machine, like Ollama's, count as free: a hit there saves time, not money. Note that `anthropic.claude-…` with a dot is a Bedrock id while `anthropic/claude-…` with a slash is an OpenRouter id, and the router tells them apart.
+
+**Checked live, not just in tests.** On 2026-09-11 the proxy ran against real **Google Gemini**, **Groq** and **Ollama** one host at a time, and then all three through one proxy, driven by the official OpenAI SDK, alongside the AWS Bedrock benchmark. Each single-host run covers a miss, an exact hit, a reworded hit, a similar question that must not hit, a stream and its replay, a hot-temperature bypass and an unknown model's error, and checks that the API key never reaches the log. Results are in [docs/evaluation.md](docs/evaluation.md#live-provider-checks), and `bench/live_check.py` and `bench/live_routing.py` rerun them with your own keys. The other hosts share the same adapter and its tests, but have not yet been run against the real service.
 
 ### Where the cache lives
 
@@ -418,6 +445,7 @@ Every response carries headers explaining the decision:
 | `X-Cache-Age-Seconds` | How old the served entry is |
 | `X-Cache-Lookup-Ms`, `X-Cache-Latency-Ms` | Lookup time and total time |
 | `X-Cache-Coalesced` | Present when this request joined an in-flight identical call |
+| `X-Cache-Upstream` | Which host answered, or whose cached answer this is |
 
 Clients can steer per request with `X-Cache-Control`:
 
@@ -432,8 +460,8 @@ Clients can steer per request with `X-Cache-Control`:
 | --- | --- |
 | `GET /admin/stats` | Hit rate, tier split, money saved, latency percentiles, entry count |
 | `GET /admin/config` | Effective thresholds, TTLs and rules |
-| `GET /admin/providers` | Every host, its base URL, its pip extra, example model ids |
-| `GET /admin/route/{model}` | Where one model name would go, and why |
+| `GET /admin/providers` | The hosts this proxy routes to and how many models each lists, plus every supported host |
+| `GET /admin/route/{model}` | Which host one model name goes to, what it receives, and why |
 | `POST /admin/invalidate` | Drop by `namespace`, by `model`, or `all` |
 | `GET /admin/requests` | Recent request log: what the cache did with each one |
 | `GET /admin/near-misses` | Recent lookups that landed just below threshold |
@@ -453,8 +481,9 @@ curl -s http://localhost:8080/admin/threshold-sweep -H 'Content-Type: applicatio
 ### Command line
 
 ```bash
-cachellm serve                 # run the proxy, auto-detecting a provider
-cachellm providers             # every host, and what this machine can reach
+cachellm serve                 # run the proxy, routing to every host it finds
+cachellm providers             # every host, and which ones this proxy will use
+cachellm route gemini-2.5-flash  # which host a model name goes to, and why
 cachellm stats                 # hit rate, savings, latency, recent requests
 cachellm watch                 # follow requests live, like tail -f
 cachellm config                # effective configuration
@@ -506,6 +535,8 @@ Every setting is an environment variable prefixed `CACHELLM_`, or a line in `.en
 | `CACHELLM_MAX_CACHEABLE_TEMPERATURE` | `0.3` | Above this, nothing is cached |
 | `CACHELLM_PII_GUARD` | `true` | Refuse to store prompts that look personal |
 | `CACHELLM_DEFAULT_PROVIDER` | `openai` | `openai` covers every OpenAI-compatible host. Also `bedrock` or `fake`. Left unset, the proxy picks from the keys it finds |
+| `CACHELLM_HOSTS` | every host found | Which hosts to route between, such as `groq,gemini`. The first is the default |
+| `CACHELLM_DISCOVER_MODELS` | `true` | Ask each host for its model list at startup, so names go where they are served |
 | `CACHELLM_LOG_PROMPTS` | `false` | Prompt text stays out of logs unless you opt in |
 
 ## Deployment and infrastructure
@@ -574,7 +605,7 @@ cachellm/
 ## Testing
 
 ```bash
-make test          # 327 tests
+make test          # 356 tests
 make test-cov      # with coverage
 make lint          # ruff and mypy
 ```

@@ -11,7 +11,8 @@ behaviour, prints what the cache did, and writes the evidence to results/live/.
 The key goes into the proxy's environment and nowhere else. The script never
 prints it, and it fails the run if the key shows up in the proxy's log.
 Detection picks the host from the variable name, exactly as it would for you.
-A full run costs a fraction of a cent.
+A full run costs a fraction of a cent. Leave out --var for a local host such as
+Ollama, which needs no key and is found because it is running.
 """
 
 from __future__ import annotations
@@ -40,7 +41,9 @@ HTTP_404 = "In one sentence, what does the HTTP status code 404 mean?"
 NO_SUCH_MODEL = "no-such-model-cachellm"
 
 
-def read_key(var: str, env_file: str | None) -> str:
+def read_key(var: str | None, env_file: str | None) -> str:
+    if not var:
+        return ""
     if not env_file:
         if value := os.environ.get(var, "").strip():
             return value
@@ -79,10 +82,13 @@ def ask(client: OpenAI, model: str, text: str, stream: bool = False, **kw: Any) 
             )
             parts: list[str] = []
             finish = None
+            tokens = 0
             for chunk in raw_stream.parse():
                 for choice in chunk.choices:
                     parts.append(choice.delta.content or "")
                     finish = choice.finish_reason or finish
+                if chunk.usage is not None:
+                    tokens = chunk.usage.total_tokens
             answer = "".join(parts)
             h, status = raw_stream.headers, raw_stream.http_response.status_code
         else:
@@ -92,14 +98,17 @@ def ask(client: OpenAI, model: str, text: str, stream: bool = False, **kw: Any) 
             parsed = raw_once.parse()
             answer = parsed.choices[0].message.content or ""
             finish = parsed.choices[0].finish_reason
+            tokens = parsed.usage.total_tokens if parsed.usage else 0
             h, status = raw_once.headers, raw_once.http_response.status_code
         row.update(
             status=status,
             cache=h.get("x-cache", "-"),
+            upstream=h.get("x-cache-upstream", "-"),
             tier=h.get("x-cache-tier", "-"),
             similarity=h.get("x-cache-similarity", "-"),
             finish=finish,
             answer=answer,
+            tokens=tokens,
         )
     except APIStatusError as exc:
         row.update(
@@ -109,10 +118,19 @@ def ask(client: OpenAI, model: str, text: str, stream: bool = False, **kw: Any) 
             similarity="-",
             finish="error",
             answer=str(exc.message),
+            tokens=0,
+            upstream="-",
         )
     except APIError as exc:  # an error event in the middle of a stream
         row.update(
-            status=200, cache="-", tier="-", similarity="-", finish="error", answer=str(exc.message)
+            status=200,
+            cache="-",
+            tier="-",
+            similarity="-",
+            finish="error",
+            answer=str(exc.message),
+            tokens=0,
+            upstream="-",
         )
     row["ms"] = round((time.perf_counter() - started) * 1000, 1)
     return row
@@ -132,9 +150,9 @@ def run(args: argparse.Namespace) -> int:
         for name in ("PATH", "HOME", "TMPDIR", "FASTEMBED_CACHE_PATH")
         if name in os.environ
     }
-    env.update(
-        {args.var: key, "CACHELLM_BACKEND": "memory", "NO_COLOR": "1", "LANG": "en_US.UTF-8"}
-    )
+    env.update({"CACHELLM_BACKEND": "memory", "NO_COLOR": "1", "LANG": "en_US.UTF-8"})
+    if args.var:
+        env[args.var] = key
     with open(log_path, "w") as log:
         proxy = subprocess.Popen(
             [sys.executable, "-m", "cachellm", "serve", "--port", str(port)],
@@ -174,11 +192,13 @@ def run(args: argparse.Namespace) -> int:
 
         records = httpx.get(f"{url}/admin/requests", params={"limit": 100}, timeout=5).json()
         items = records.get("requests", records) if isinstance(records, dict) else records
+        routes = httpx.get(f"{url}/admin/providers", timeout=5).json().get("routes", [])
+        local = any(route.get("default") and route.get("local") for route in routes)
         spent = sum(float(i.get("spent_usd") or 0) for i in items)
         saved = sum(float(i.get("saved_usd") or 0) for i in items)
         dashboard = subprocess.run(
             [sys.executable, "-m", "cachellm", "stats", "--url", url, "--limit", "14"],
-            env={**env, args.var: ""},
+            env={k: v for k, v in env.items() if k != args.var},
             capture_output=True,
             text=True,
             cwd=out_dir,
@@ -237,9 +257,17 @@ def run(args: argparse.Namespace) -> int:
             r["bad_model"]["status"] in (400, 404),
         ),
         ("so does a stream to an unknown model", r["bad_model_stream"]["status"] in (400, 404)),
-        ("token usage came back, so spend is counted", spent > 0),
-        ("the API key never appears in the proxy log", key not in log_text),
+        (
+            "token usage came back, streamed or not",
+            r["first"]["tokens"] > 0 and r["stream"]["tokens"] > 0,
+        ),
+        (
+            "a local model counts as free" if local else "spend on misses is counted",
+            spent == 0 if local else spent > 0,
+        ),
     ]
+    if key:
+        checks.append(("the API key never appears in the proxy log", key not in log_text))
     for n, extra in enumerate(args.also or []):
         checks.append(
             (
@@ -289,7 +317,7 @@ def main() -> None:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument(
-        "--var", required=True, help="Environment variable holding the key, e.g. GROQ_API_KEY."
+        "--var", help="Environment variable holding the key, e.g. GROQ_API_KEY. Omit for Ollama."
     )
     parser.add_argument("--model", required=True, help="Model to test, as your app would send it.")
     parser.add_argument("--name", required=True, help="Label for this run and its results file.")

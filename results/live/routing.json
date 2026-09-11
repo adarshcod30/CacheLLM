@@ -1,0 +1,299 @@
+{
+  "name": "routing",
+  "run_at": "2026-09-11T00:24:31+00:00",
+  "passed": true,
+  "routes": [
+    {
+      "key": "gemini",
+      "name": "Google Gemini",
+      "default": true,
+      "models_listed": 55,
+      "local": false
+    },
+    {
+      "key": "groq",
+      "name": "Groq",
+      "default": false,
+      "models_listed": 14,
+      "local": false
+    },
+    {
+      "key": "ollama",
+      "name": "Ollama, on this machine",
+      "default": false,
+      "models_listed": 1,
+      "local": true
+    },
+    {
+      "key": "bedrock",
+      "name": "AWS Bedrock",
+      "default": false,
+      "models_listed": 0,
+      "local": false
+    }
+  ],
+  "models_by_host": {
+    "gemini": 55,
+    "groq": 14,
+    "ollama": 1,
+    "bedrock": 4
+  },
+  "checks": [
+    {
+      "check": "gemini-2.5-flash is answered by gemini",
+      "passed": true
+    },
+    {
+      "check": "models/gemini-3.5-flash-lite is answered by gemini",
+      "passed": true
+    },
+    {
+      "check": "openai/gpt-oss-20b is answered by groq",
+      "passed": true
+    },
+    {
+      "check": "groq/openai/gpt-oss-120b is answered by groq",
+      "passed": true
+    },
+    {
+      "check": "qwen2.5:0.5b is answered by ollama",
+      "passed": true
+    },
+    {
+      "check": "each host missed once, so no host was served another's answer",
+      "passed": true
+    },
+    {
+      "check": "each repeat hit the cache of the host that answered it",
+      "passed": true
+    },
+    {
+      "check": "a prefix for a host with no key is refused with the fix",
+      "passed": true
+    },
+    {
+      "check": "the model list includes every expected host",
+      "passed": true
+    },
+    {
+      "check": "GEMINI_API_KEY never appears in the proxy log",
+      "passed": true
+    },
+    {
+      "check": "GROQ_API_KEY never appears in the proxy log",
+      "passed": true
+    }
+  ],
+  "requests": [
+    {
+      "model": "gemini-2.5-flash",
+      "expected": "gemini",
+      "first": {
+        "model": "gemini-2.5-flash",
+        "question": "What is the capital of Finland?",
+        "stream": false,
+        "status": 200,
+        "cache": "MISS",
+        "upstream": "gemini",
+        "tier": "-",
+        "similarity": "0.0000",
+        "finish": "stop",
+        "answer": "The capital of Finland is **Helsinki**.",
+        "tokens": 18,
+        "ms": 1316.3
+      },
+      "again": {
+        "model": "gemini-2.5-flash",
+        "question": "What is the capital of Finland?",
+        "stream": false,
+        "status": 200,
+        "cache": "HIT",
+        "upstream": "gemini",
+        "tier": "exact",
+        "similarity": "1.0000",
+        "finish": "stop",
+        "answer": "The capital of Finland is **Helsinki**.",
+        "tokens": 18,
+        "ms": 1.4
+      },
+      "route": {
+        "model": "gemini-2.5-flash",
+        "provider": "gemini",
+        "host": "Google Gemini",
+        "adapter": "openai",
+        "forwarded_as": "gemini-2.5-flash",
+        "reason": "listed by Google Gemini",
+        "local": false,
+        "error": null
+      }
+    },
+    {
+      "model": "models/gemini-3.5-flash-lite",
+      "expected": "gemini",
+      "first": {
+        "model": "models/gemini-3.5-flash-lite",
+        "question": "What is the capital of Finland?",
+        "stream": false,
+        "status": 200,
+        "cache": "MISS",
+        "upstream": "gemini",
+        "tier": "-",
+        "similarity": "0.0000",
+        "finish": "stop",
+        "answer": "The capital of Finland is Helsinki.",
+        "tokens": 15,
+        "ms": 739.5
+      },
+      "again": {
+        "model": "models/gemini-3.5-flash-lite",
+        "question": "What is the capital of Finland?",
+        "stream": false,
+        "status": 200,
+        "cache": "HIT",
+        "upstream": "gemini",
+        "tier": "exact",
+        "similarity": "1.0000",
+        "finish": "stop",
+        "answer": "The capital of Finland is Helsinki.",
+        "tokens": 15,
+        "ms": 1.4
+      },
+      "route": {
+        "model": "models/gemini-3.5-flash-lite",
+        "provider": "gemini",
+        "host": "Google Gemini",
+        "adapter": "openai",
+        "forwarded_as": "models/gemini-3.5-flash-lite",
+        "reason": "listed by Google Gemini",
+        "local": false,
+        "error": null
+      }
+    },
+    {
+      "model": "openai/gpt-oss-20b",
+      "expected": "groq",
+      "first": {
+        "model": "openai/gpt-oss-20b",
+        "question": "What is the capital of Finland?",
+        "stream": false,
+        "status": 200,
+        "cache": "MISS",
+        "upstream": "groq",
+        "tier": "-",
+        "similarity": "0.0000",
+        "finish": "stop",
+        "answer": "The capital of Finland is **Helsinki**.",
+        "tokens": 120,
+        "ms": 154.8
+      },
+      "again": {
+        "model": "openai/gpt-oss-20b",
+        "question": "What is the capital of Finland?",
+        "stream": false,
+        "status": 200,
+        "cache": "HIT",
+        "upstream": "groq",
+        "tier": "exact",
+        "similarity": "1.0000",
+        "finish": "stop",
+        "answer": "The capital of Finland is **Helsinki**.",
+        "tokens": 120,
+        "ms": 1.3
+      },
+      "route": {
+        "model": "openai/gpt-oss-20b",
+        "provider": "groq",
+        "host": "Groq",
+        "adapter": "openai",
+        "forwarded_as": "openai/gpt-oss-20b",
+        "reason": "listed by Groq",
+        "local": false,
+        "error": null
+      }
+    },
+    {
+      "model": "groq/openai/gpt-oss-120b",
+      "expected": "groq",
+      "first": {
+        "model": "groq/openai/gpt-oss-120b",
+        "question": "What is the capital of Finland?",
+        "stream": false,
+        "status": 200,
+        "cache": "MISS",
+        "upstream": "groq",
+        "tier": "-",
+        "similarity": "0.0000",
+        "finish": "stop",
+        "answer": "The capital of Finland is **Helsinki**.",
+        "tokens": 121,
+        "ms": 364.6
+      },
+      "again": {
+        "model": "groq/openai/gpt-oss-120b",
+        "question": "What is the capital of Finland?",
+        "stream": false,
+        "status": 200,
+        "cache": "HIT",
+        "upstream": "groq",
+        "tier": "exact",
+        "similarity": "1.0000",
+        "finish": "stop",
+        "answer": "The capital of Finland is **Helsinki**.",
+        "tokens": 121,
+        "ms": 1.3
+      },
+      "route": {
+        "model": "groq/openai/gpt-oss-120b",
+        "provider": "groq",
+        "host": "Groq",
+        "adapter": "openai",
+        "forwarded_as": "openai/gpt-oss-120b",
+        "reason": "the groq/ host prefix",
+        "local": false,
+        "error": null
+      }
+    },
+    {
+      "model": "qwen2.5:0.5b",
+      "expected": "ollama",
+      "first": {
+        "model": "qwen2.5:0.5b",
+        "question": "What is the capital of Finland?",
+        "stream": false,
+        "status": 200,
+        "cache": "MISS",
+        "upstream": "ollama",
+        "tier": "-",
+        "similarity": "0.0000",
+        "finish": "stop",
+        "answer": "The capital of Finland is Helsinki.",
+        "tokens": 44,
+        "ms": 95.3
+      },
+      "again": {
+        "model": "qwen2.5:0.5b",
+        "question": "What is the capital of Finland?",
+        "stream": false,
+        "status": 200,
+        "cache": "HIT",
+        "upstream": "ollama",
+        "tier": "exact",
+        "similarity": "1.0000",
+        "finish": "stop",
+        "answer": "The capital of Finland is Helsinki.",
+        "tokens": 44,
+        "ms": 1.1
+      },
+      "route": {
+        "model": "qwen2.5:0.5b",
+        "provider": "ollama",
+        "host": "Ollama, on this machine",
+        "adapter": "openai",
+        "forwarded_as": "qwen2.5:0.5b",
+        "reason": "listed by Ollama, on this machine",
+        "local": true,
+        "error": null
+      }
+    }
+  ]
+}

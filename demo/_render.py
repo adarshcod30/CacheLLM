@@ -6,7 +6,12 @@ import json
 import sys
 
 GREEN, AMBER, MAGENTA, DIM, BOLD, RESET = (
-    "\033[32m", "\033[33m", "\033[35m", "\033[2m", "\033[1m", "\033[0m",
+    "\033[32m",
+    "\033[33m",
+    "\033[35m",
+    "\033[2m",
+    "\033[1m",
+    "\033[0m",
 )
 COLOURS = {"HIT": GREEN, "MISS": AMBER, "BYPASS": MAGENTA, "SHADOW": MAGENTA}
 

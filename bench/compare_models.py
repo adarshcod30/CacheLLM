@@ -20,7 +20,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import gc
 import json
+import os
+import platform
 import time
 from pathlib import Path
 from typing import Any
@@ -63,17 +66,27 @@ async def score_model(model: str, dim: int, pairs: list[dict[str, Any]]) -> dict
     # like "latency probe 123.4" and report the mean, which says little about
     # the questions people actually send. Still sensitive to CPU load: run it
     # on a quiet machine and read the column as a ranking first.
-    probe = FastEmbedEmbedder(model_name=model, dim=dim, cache_size=0)
+    # Best of three rounds, the way timeit does it: background load only ever
+    # adds time, so the quietest round is the closest to the model's own cost.
+    probe = embedder.uncached()
     questions = list(dict.fromkeys(texts_a + texts_b))
     for text in questions[:10]:
         await probe.embed(text)
-    timings: list[float] = []
-    for text in questions:
-        started_one = time.perf_counter()
-        await probe.embed(text)
-        timings.append((time.perf_counter() - started_one) * 1000)
+    rounds: list[list[float]] = []
+    for _ in range(3):
+        timings: list[float] = []
+        for text in questions:
+            started_one = time.perf_counter()
+            await probe.embed(text)
+            timings.append((time.perf_counter() - started_one) * 1000)
+        rounds.append(timings)
+    timings = min(rounds, key=lambda r: float(np.percentile(r, 50)))
     embed_p50 = float(np.percentile(timings, 50))
     embed_p95 = float(np.percentile(timings, 95))
+    # Free this model's ONNX session before the next one loads. Keeping six
+    # alive until exit crashed the interpreter while it tore them down.
+    del probe, embedder
+    gc.collect()
 
     best_safe: dict[str, Any] | None = None
     best_1pct: dict[str, Any] | None = None
@@ -143,6 +156,9 @@ async def main() -> None:
     pairs = labelled_pairs()
     candidates = [(m, 0) for m in args.models] if args.models else CANDIDATES
 
+    load_before = os.getloadavg()[0]
+    if load_before > 1.5:
+        print(f"note: load average is {load_before:.1f}, so embed timings will run high")
     rows: list[dict[str, Any]] = []
     for model, dim in candidates:
         print(f"scoring {model} ...", flush=True)
@@ -153,7 +169,15 @@ async def main() -> None:
 
     rows.sort(key=lambda r: (r["safe_operating_point"] or {}).get("recall", 0), reverse=True)
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps({"pairs": len(pairs), "models": rows}, indent=2))
+    conditions = {
+        "machine": f"{platform.system()} {platform.machine()}",
+        "load_1m_before": round(load_before, 2),
+        "load_1m_after": round(os.getloadavg()[0], 2),
+        "timing": "one real question per call, embedding cache off, best of three rounds",
+    }
+    args.out.write_text(
+        json.dumps({"pairs": len(pairs), "conditions": conditions, "models": rows}, indent=2)
+    )
     markdown = to_markdown(rows)
     args.markdown.write_text(markdown)
     print()
