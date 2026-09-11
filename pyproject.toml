@@ -1,7 +1,7 @@
 [project]
 name = "cachellm-proxy"
 version = "0.3.0"
-description = "A drop-in semantic cache for OpenAI-compatible LLM APIs: match requests by meaning, serve repeats instantly, cut spend."
+description = "A drop-in semantic cache for LLM APIs: match requests by meaning, serve repeats instantly, and route across OpenAI, Gemini, Groq, Claude, Ollama and Bedrock."
 readme = "README.md"
 authors = [
     { name = "Adarsh Dwivedi", email = "adarshdwivedi256@gmail.com" }
@@ -9,16 +9,21 @@ authors = [
 requires-python = ">=3.11"
 license = "MIT"
 keywords = [
-    "llm", "cache", "semantic-cache", "openai", "bedrock", "proxy",
+    "llm", "cache", "semantic-cache", "llm-cache", "llm-proxy", "openai",
+    "gemini", "groq", "anthropic", "ollama", "bedrock", "proxy",
     "vector-search", "redis", "fastapi", "llmops", "cost-optimization",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
+    "Environment :: Console",
     "Framework :: FastAPI",
     "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: Proxy Servers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed",
 ]
@@ -38,8 +43,11 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/adarshcod30/CacheLLM"
+Documentation = "https://github.com/adarshcod30/CacheLLM#readme"
 Repository = "https://github.com/adarshcod30/CacheLLM"
 Issues = "https://github.com/adarshcod30/CacheLLM/issues"
+Changelog = "https://github.com/adarshcod30/CacheLLM/blob/main/CHANGELOG.md"
+Evaluation = "https://github.com/adarshcod30/CacheLLM/blob/main/docs/evaluation.md"
 
 [project.scripts]
 cachellm = "cachellm:main"

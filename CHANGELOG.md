@@ -35,8 +35,25 @@ Checked live against all three at once.
 - **Local models count as free.** A hit on Ollama saves time, not money, and
   the stats now say so instead of pricing it like a hosted model.
 
+### Documentation
+
+- **The README is a complete guide**: installation, every client, every
+  provider, storage, the full configuration, command line and HTTP
+  references, the evaluation pipeline, deployment, security,
+  troubleshooting and limitations. Links are absolute, so it reads the same
+  on PyPI as on GitHub.
+- **New `CONTRIBUTING.md` and `SECURITY.md`**, issue forms for bugs and
+  features, and a pull request checklist.
+- **Every client example was run**: the Python and Node.js OpenAI SDKs,
+  LangChain and curl.
+
 ### Changed
 
+- **Current prices for OpenAI, Anthropic and xAI models**, checked against
+  their pricing pages on 2026-09-11, so savings on `gpt-5.6-luna`,
+  `claude-haiku-4-5` or `grok-4.6` are priced correctly.
+- **Docker Compose passes provider keys through**, together with
+  `CACHELLM_HOSTS`, so `make up` can reach real providers.
 - **Cache entries are keyed by host.** On any host other than OpenAI itself,
   answers cached by 0.2 are not reused after upgrading, so the cache starts
   cold once. The default in-memory store starts cold on every restart anyway,
@@ -47,6 +64,18 @@ Checked live against all three at once.
 
 ### Fixed
 
+- **`cachellm invalidate` clears the running proxy.** It built its own state,
+  so with the default in-memory store it cleared an empty cache of its own,
+  reported "removed 0 keys", and left the real one full. It now goes through
+  the proxy, like `stats`, and takes `--url`.
+- **`cachellm tune` works after `pip install`.** It imported from the
+  repository's `bench/` folder, which the package does not ship, so it
+  crashed for everyone who had not cloned the repo. The sweep now lives in
+  `cachellm.tuning`.
+- **Bedrock follows your AWS region.** The region was always passed to AWS
+  explicitly, so `AWS_REGION` and the profile's own region were ignored and
+  every request went to us-east-1. The order is now `CACHELLM_AWS_REGION`,
+  `AWS_REGION`, `AWS_DEFAULT_REGION`, the profile, then us-east-1.
 - **The model comparison benchmark no longer crashes on exit.** With six
   models loaded at once it died while tearing them down. It now frees each
   model before loading the next, times each one as the quietest of three

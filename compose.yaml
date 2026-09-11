@@ -17,6 +17,15 @@ services:
       CACHELLM_API_KEYS: ${CACHELLM_API_KEYS:-}
       CACHELLM_SHADOW_MODE: ${CACHELLM_SHADOW_MODE:-false}
       CACHELLM_FAKE_LATENCY_MS: ${CACHELLM_FAKE_LATENCY_MS:-600}
+      # Real providers: export their keys and name them in CACHELLM_HOSTS, for
+      # example CACHELLM_HOSTS=groq,gemini GROQ_API_KEY=... make up
+      CACHELLM_HOSTS: ${CACHELLM_HOSTS:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       # Bedrock: mount ~/.aws or pass keys through the environment.
       AWS_REGION: ${AWS_REGION:-us-east-1}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}

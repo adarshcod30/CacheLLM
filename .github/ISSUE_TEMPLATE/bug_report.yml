@@ -1,0 +1,53 @@
+name: Bug report
+description: Something does not work the way the README says it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please never paste API keys. The proxy's logs never contain them, so logs are safe to share.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, and what went wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: Commands and a request. The `fake/echo` model lets anyone run it without an account.
+      render: bash
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `cachellm version`.
+    validations:
+      required: true
+  - type: input
+    id: provider
+    attributes:
+      label: Provider and model
+      placeholder: Groq, openai/gpt-oss-20b
+  - type: dropdown
+    id: store
+    attributes:
+      label: Cache store
+      options:
+        - memory
+        - redis
+        - not sure
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Headers, logs or stats
+      description: The X-Cache headers, the output of `cachellm route <model>`, or `cachellm stats`.
+      render: text
