@@ -44,6 +44,16 @@ class FastEmbedEmbedder(Embedder):
                     self._model = await asyncio.to_thread(load)
         return self._model
 
+    def uncached(self) -> FastEmbedEmbedder:
+        """A copy that shares this loaded model but never caches, for timing.
+
+        Sharing matters: a second ONNX session per model doubles memory, and
+        several sessions tearing down together at exit crashed the benchmark.
+        """
+        sibling = FastEmbedEmbedder(self.name, self.dim, cache_size=0)
+        sibling._model = self._model
+        return sibling
+
     def _cache_get(self, text: str) -> np.ndarray | None:
         vec = self._cache.get(text)
         if vec is not None:

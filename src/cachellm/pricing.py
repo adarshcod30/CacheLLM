@@ -119,5 +119,10 @@ def price_for(model: str) -> ModelPrice:
     return _FALLBACK
 
 
-def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
+def estimate_cost(
+    model: str, input_tokens: int, output_tokens: int, *, free: bool = False
+) -> float:
+    """List-price cost of these tokens. `free` is for models running locally."""
+    if free:
+        return 0.0
     return price_for(model).cost(input_tokens, output_tokens)

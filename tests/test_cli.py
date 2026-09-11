@@ -75,7 +75,7 @@ def test_version() -> None:
 def test_help_lists_every_command() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    for command in ("serve", "stats", "watch", "providers", "invalidate", "config"):
+    for command in ("serve", "stats", "watch", "providers", "route", "invalidate", "config"):
         assert command in result.output
 
 
@@ -84,6 +84,27 @@ def test_providers_lists_every_catalogued_host() -> None:
     assert result.exit_code == 0
     for name in ("OpenAI", "Groq", "Ollama", "AWS Bedrock", "OpenRouter", "xAI, Grok"):
         assert name in result.output
+
+
+def test_route_explains_where_a_name_goes(live_proxy: str) -> None:
+    result = runner.invoke(app, ["route", "fake/echo", "--url", live_proxy])
+    assert result.exit_code == 0, result.output
+    assert "Test double" in result.output
+    assert "sent as   echo" in result.output
+
+
+def test_route_explains_a_host_that_is_not_enabled(live_proxy: str) -> None:
+    result = runner.invoke(app, ["route", "mistral/mistral-large-latest", "--url", live_proxy])
+    assert result.exit_code == 1
+    assert "MISTRAL_API_KEY" in result.output
+
+
+def test_route_says_what_to_do_when_nothing_is_running() -> None:
+    result = runner.invoke(
+        app, ["route", "gpt-4o-mini", "--url", f"http://127.0.0.1:{free_port()}"]
+    )
+    assert result.exit_code == 1
+    assert "No proxy answering" in result.output
 
 
 def test_config_never_prints_secrets(monkeypatch) -> None:

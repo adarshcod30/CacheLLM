@@ -19,12 +19,7 @@ from cachellm.api.auth import verify
 from cachellm.api.deps import get_state
 from cachellm.errors import CacheLLMError
 from cachellm.providers.catalog import (
-    BEDROCK_VENDORS,
     HOSTS,
-    OPENAI_FAMILIES,
-    ROUTING_PREFIXES,
-    looks_like_bedrock,
-    looks_like_openai,
 )
 
 log = structlog.get_logger(__name__)
@@ -142,27 +137,45 @@ async def config(request: Request) -> dict[str, Any]:
 
 @router.get("/providers")
 async def providers(request: Request) -> dict[str, Any]:
-    """Where model names go, and what to type for each host.
-
-    Answers the question the router answers, but for a human: which names route
-    where, what base URL each hosting provider needs, and which need a pip extra.
-    """
+    """Which hosts this proxy routes to, and what to type for every other one."""
     state = get_state(request)
     if state.settings.require_auth_for_admin:
         verify(request, state.settings.client_keys)
+    registry = state.providers
+    plan = registry.plan
+    listed = registry.listed_counts()
     return {
         "default_provider": state.settings.default_provider,
-        "routing": {
-            "1_explicit_prefix": list(ROUTING_PREFIXES),
-            "2_bedrock_vendor_prefixes": list(BEDROCK_VENDORS),
-            "2_openai_families": list(OPENAI_FAMILIES),
-            "3_everything_else": state.settings.default_provider,
-        },
+        "default_route": plan.default,
+        "source": plan.source,
+        "routes": [
+            {
+                "key": key,
+                "name": plan.routes[key].name,
+                "adapter": plan.routes[key].adapter,
+                "base_url": plan.routes[key].base_url,
+                "reason": plan.routes[key].reason,
+                "default": key == plan.default,
+                "local": plan.routes[key].local,
+                "models_listed": listed.get(key, 0),
+            }
+            for key in plan.enabled
+        ],
+        "routing": [
+            "bedrock/ and fake/ prefixes pick those adapters",
+            "Bedrock vendor.model names go to Bedrock",
+            "a name a host lists as its own goes to that host",
+            "a host prefix such as groq/ or gemini/ picks that host",
+            "claude-, gemini-, grok- and similar names go to their host, if enabled",
+            "anything else goes to the default route",
+        ],
         "hosts": [
             {
                 "name": h.name,
+                "key": h.key,
                 "adapter": h.provider,
                 "base_url": h.base_url,
+                "env_key": h.env_key,
                 "pip_extra": h.extra,
                 "example_models": list(h.examples),
                 "note": h.note,
@@ -174,25 +187,20 @@ async def providers(request: Request) -> dict[str, Any]:
 
 @router.get("/route/{model:path}")
 async def route(request: Request, model: str) -> dict[str, Any]:
-    """Explain where one model name would go, and why."""
+    """Explain where one model name would go, what the host receives, and why."""
     state = get_state(request)
     if state.settings.require_auth_for_admin:
         verify(request, state.settings.client_keys)
-    provider, name = state.providers.resolve(model)
-    head, sep, _ = model.partition("/")
-    if sep and head.lower() in ROUTING_PREFIXES:
-        why = "explicit routing prefix"
-    elif looks_like_bedrock(model):
-        why = "Bedrock vendor naming convention"
-    elif looks_like_openai(model):
-        why = "OpenAI model family"
-    else:
-        why = f"no vendor could be identified, so the default ({name}) applies"
+    decision = state.providers.route(model)
     return {
         "model": model,
-        "provider": name,
-        "forwarded_as": provider.resolve_model(model),
-        "reason": why,
+        "provider": decision.key,
+        "host": state.providers.name_of(decision.key),
+        "adapter": decision.adapter,
+        "forwarded_as": decision.upstream_model,
+        "reason": decision.rule,
+        "local": decision.local,
+        "error": decision.error or None,
     }
 
 
@@ -206,6 +214,12 @@ async def invalidate(request: Request, body: InvalidateRequest) -> dict[str, Any
     removed = await state.cache.invalidate(
         namespace=body.namespace, model=body.model, drop_all=body.all
     )
+    # Entries are stored under the id the host received, so a name typed with
+    # a host prefix, like groq/openai/gpt-oss-20b, has to be translated first.
+    if body.model and not body.all:
+        upstream = state.providers.route(body.model).upstream_model
+        if upstream != body.model:
+            removed += await state.cache.invalidate(model=upstream)
     return {
         "removed_keys": removed,
         "namespace": body.namespace,

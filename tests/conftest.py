@@ -39,6 +39,8 @@ def make_settings(**overrides) -> Settings:
         "log_json": True,
         "log_level": "WARNING",
         "metrics_enabled": True,
+        # Tests never reach out to real hosts for their model lists.
+        "discover_models": False,
     }
     base.update(overrides)
     return Settings(**base)

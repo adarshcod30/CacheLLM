@@ -147,6 +147,14 @@ class OpenAICompatProvider(Provider):
         except httpx.HTTPError as exc:
             raise UpstreamError(f"Upstream stream failed: {exc}") from exc
 
+    async def list_models(self) -> list[str]:
+        """The model ids this host serves right now, from its GET /models."""
+        response = await self._http().get("/models")
+        response.raise_for_status()
+        body = response.json()
+        items = body.get("data", []) if isinstance(body, dict) else body
+        return [str(item["id"]) for item in items if isinstance(item, dict) and item.get("id")]
+
     async def close(self) -> None:
         if self._client is not None:
             await self._client.aclose()

@@ -158,7 +158,7 @@ HOSTS: tuple[Host, ...] = (
         "https://api.openai.com/v1",
         "OPENAI_API_KEY",
         None,
-        ("gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "o3-mini", "text-embedding-3-small"),
+        ("gpt-5.6-luna", "gpt-5.6-terra", "gpt-6-astra"),
         "Recognised by family prefix, so these route here whatever the default is.",
     ),
     Host(
@@ -168,7 +168,7 @@ HOSTS: tuple[Host, ...] = (
         "https://api.anthropic.com/v1",
         "ANTHROPIC_API_KEY",
         None,
-        ("claude-sonnet-4-5", "claude-haiku-4-5", "claude-3-5-haiku-latest"),
+        ("claude-sonnet-5", "claude-haiku-4-5", "claude-opus-5"),
         "Anthropic ships an OpenAI-compatible endpoint. Claude is also reachable "
         "through Bedrock with no vendor key.",
     ),
@@ -179,7 +179,7 @@ HOSTS: tuple[Host, ...] = (
         "https://generativelanguage.googleapis.com/v1beta/openai/",
         "GEMINI_API_KEY",
         None,
-        ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.5-flash"),
+        ("gemini-2.5-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite"),
         "Also reads GOOGLE_API_KEY. Generous free tier.",
     ),
     Host(
@@ -189,7 +189,7 @@ HOSTS: tuple[Host, ...] = (
         "https://api.x.ai/v1",
         "XAI_API_KEY",
         None,
-        ("grok-4", "grok-3-mini", "grok-2-1212"),
+        ("grok-4.6", "grok-4.5", "grok-4.3"),
         "",
     ),
     Host(
@@ -323,6 +323,73 @@ def looks_like_bedrock(model: str) -> bool:
 def looks_like_openai(model: str) -> bool:
     """True when the id is one of OpenAI's own model families."""
     return model.lower().startswith(OPENAI_FAMILIES)
+
+
+# ------------------------------------------------------- several hosts at once
+
+#: Hosts that run on this machine. Their tokens cost nothing, so savings on them
+#: are counted in time, not money.
+LOCAL_HOSTS: frozenset[str] = frozenset({"ollama", "local"})
+
+#: Bare model names a host is known by. They only decide a route when that host
+#: is enabled and no host's live model list claimed the name first. Families
+#: that several hosts serve, such as llama, qwen and gpt-oss, are deliberately
+#: absent: for those the model list or the default host decides.
+NAME_CONVENTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("anthropic", ("claude-",)),
+    ("gemini", ("gemini-", "models/gemini-", "gemma-")),
+    ("xai", ("grok-",)),
+    ("deepseek", ("deepseek-",)),
+    (
+        "mistral",
+        (
+            "mistral-",
+            "codestral-",
+            "ministral-",
+            "pixtral-",
+            "magistral-",
+            "devstral-",
+            "open-mistral-",
+            "open-mixtral-",
+        ),
+    ),
+    ("perplexity", ("sonar",)),
+    ("moonshot", ("kimi-", "moonshot-v1-")),
+)
+
+#: Host keys that are never also a vendor namespace inside another host's model
+#: ids. `gemini/...` can only mean "send this to Gemini", whereas `openai/...`
+#: is also how Groq, OpenRouter and Together name OpenAI's open models, so a
+#: prefix like that has to be allowed to fall through to whoever serves it.
+HOST_ONLY_PREFIXES: frozenset[str] = frozenset(
+    {"gemini", "xai", "mistral", "together", "fireworks", "cerebras", "moonshot", "ollama", "local"}
+)
+
+
+def convention_host(model: str) -> str | None:
+    """The host a bare model name belongs to by naming convention, if any."""
+    m = model.strip().lower()
+    if "/" in m and not m.startswith("models/"):
+        return None  # vendor/model ids are served by several hosts
+    if looks_like_openai(m) and not m.startswith("gpt-oss"):
+        return "openai"
+    for key, prefixes in NAME_CONVENTIONS:
+        if m.startswith(prefixes):
+            return key
+    if ":" in m:
+        # An Ollama tag such as `llama3.2:1b`. Bedrock ids also carry a colon,
+        # but they are recognised by their vendor prefix before this runs.
+        return "ollama"
+    return None
+
+
+def host_for_base_url(url: str) -> Host | None:
+    """The catalogued host behind a base URL, so a configured one gets its name."""
+    target = url.strip().rstrip("/").lower()
+    for host in HOSTS:
+        if host.base_url and host.base_url.rstrip("/").lower() == target:
+            return host
+    return None
 
 
 def strip_routing_prefix(model: str) -> str:

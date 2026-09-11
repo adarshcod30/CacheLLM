@@ -116,21 +116,30 @@ async def build_state(
     embedder: Embedder | None = None,
     providers: ProviderRegistry | None = None,
 ) -> AppState:
-    autoconfigured = detect.apply(settings)
-    if autoconfigured:
-        log.info(
-            "provider_autodetected",
-            using=autoconfigured,
-            hint="set CACHELLM_DEFAULT_PROVIDER or CACHELLM_OPENAI_BASE_URL to override; "
-            "run `cachellm providers` to see every option",
-        )
+    if providers is None:
+        route_plan = detect.plan(settings)
+        if route_plan.source == "detected":
+            detect.apply_plan(settings, route_plan)
+            default = route_plan.routes[route_plan.default]
+            log.info(
+                "provider_autodetected",
+                using=detect.describe_route(default),
+                also=[route_plan.routes[k].name for k in route_plan.enabled[1:]],
+                hint="set CACHELLM_HOSTS to choose hosts, or CACHELLM_OPENAI_BASE_URL "
+                "for one endpoint; run `cachellm providers` to see every option",
+            )
+        providers = ProviderRegistry(settings, plan=route_plan)
 
     state = AppState(
         settings=settings,
         metrics=get_metrics(),
-        providers=providers or ProviderRegistry(settings),
+        providers=providers,
         embedder=embedder or build_embedder(settings),
     )
+    if settings.discover_models:
+        # Fetched before serving, so the very first request already routes by
+        # what each host really offers. Bounded by discover_timeout per host.
+        await providers.discover()
     redis_error = ""
     if settings.backend in ("auto", "redis"):
         try:

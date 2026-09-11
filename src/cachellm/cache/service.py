@@ -245,12 +245,15 @@ class CacheService:
         return eid
 
     # -------------------------------------------------------------- maintenance
-    async def register_hit(self, lookup: LookupResult, model: str) -> float:
-        """Bump hit bookkeeping and return the modelled dollars saved."""
+    async def register_hit(self, lookup: LookupResult, model: str, *, free: bool = False) -> float:
+        """Bump hit bookkeeping and return the modelled dollars saved.
+
+        A local model saves time but no money, so `free` counts it at zero.
+        """
         if lookup.entry is None:
             return 0.0
         await self.vectors.touch_hit(lookup.entry.entry_id)
-        saved = lookup.saved_usd(model)
+        saved = 0.0 if free else lookup.saved_usd(model)
         await self.analytics.bulk(
             {
                 "hits": 1,

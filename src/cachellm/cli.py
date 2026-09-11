@@ -152,9 +152,9 @@ def watch(
 
 @app.command()
 def providers() -> None:
-    """List every model host, and which ones this machine can already reach."""
+    """List every model host, and which ones this proxy will route to."""
+    from cachellm.providers import detect
     from cachellm.providers.catalog import HOSTS
-    from cachellm.providers.detect import available
 
     payload = {
         "hosts": [
@@ -167,19 +167,57 @@ def providers() -> None:
             for h in HOSTS
         ]
     }
-    detected = [
-        {"name": d.host.name, "reason": d.reason, "key": d.host.key}
-        for d in available(include_fake=False)
+    plan = detect.plan(get_settings())
+    ready = [
+        {
+            "name": plan.routes[key].name,
+            "reason": plan.routes[key].reason,
+            "default": key == plan.default,
+        }
+        for key in plan.enabled
+        if plan.source != "fallback"
     ]
-    typer.echo(report.providers_table(payload, detected))
-    settings = get_settings()
-    if not detected:
+    typer.echo(report.providers_table(payload, ready))
+    if not ready:
         typer.echo(
             "  Nothing configured yet. To try it with no account at all:\n"
             "    CACHELLM_DEFAULT_PROVIDER=fake cachellm serve\n"
         )
-    elif not settings.openai_base_url_is_explicit and detected[0]["key"] != "bedrock":
-        typer.echo(f"  `cachellm serve` will use {detected[0]['name']}.\n")
+    elif plan.source == "configured":
+        typer.echo(
+            "  Using the endpoint you configured. To route to more hosts as well,\n"
+            "  name them: CACHELLM_HOSTS=gemini,groq\n"
+        )
+    elif len(ready) > 1:
+        typer.echo(
+            f"  `cachellm serve` routes each model to the host that serves it.\n"
+            f"  Names no host claims go to {ready[0]['name']}. Check one with\n"
+            f"  `cachellm route <model>` once it is running.\n"
+        )
+    else:
+        typer.echo(f"  `cachellm serve` will use {ready[0]['name']}.\n")
+
+
+@app.command()
+def route(
+    model: Annotated[str, typer.Argument(help="The model name, exactly as your app sends it.")],
+    url: Annotated[str, typer.Option(help="Proxy to ask.")] = "",
+) -> None:
+    """Show which host a model name goes to, what it receives, and why."""
+    target = _proxy_url(url)
+    data = _fetch(target, f"/admin/route/{model}")
+    if data is None:
+        _not_running(target)
+        raise typer.Exit(1)
+    if data.get("error"):
+        typer.secho(f"  {data['error']}", fg="yellow")
+        raise typer.Exit(1)
+    typer.echo(
+        f"\n  {report.BOLD}{model}{report.RESET}\n"
+        f"    goes to   {data['host']}\n"
+        f"    sent as   {data['forwarded_as']}\n"
+        f"    because   {data['reason']}\n"
+    )
 
 
 @app.command()

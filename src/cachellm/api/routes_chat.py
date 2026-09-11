@@ -23,7 +23,7 @@ from cachellm.cache.entry import CacheEntry
 from cachellm.cache.keys import prompt_fingerprint
 from cachellm.cache.policy import PolicyDecision
 from cachellm.cache.service import LookupResult
-from cachellm.errors import CacheMissError, UpstreamError
+from cachellm.errors import CacheLLMError, CacheMissError, UpstreamError
 from cachellm.models import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -44,7 +44,12 @@ BYPASS_LOOKUP = LookupResult(
 
 
 def cache_headers(
-    lookup: LookupResult, *, total_ms: float, saved_usd: float = 0.0, coalesced: bool = False
+    lookup: LookupResult,
+    *,
+    total_ms: float,
+    saved_usd: float = 0.0,
+    coalesced: bool = False,
+    upstream: str = "",
 ) -> dict[str, str]:
     status = {
         "hit": "HIT",
@@ -74,6 +79,8 @@ def cache_headers(
         headers["X-Cache-Saved-USD"] = f"{saved_usd:.8f}"
     if coalesced:
         headers["X-Cache-Coalesced"] = "true"
+    if upstream:
+        headers["X-Cache-Upstream"] = upstream
     return headers
 
 
@@ -157,7 +164,9 @@ async def _record_outcome(
 async def list_models(request: Request) -> ModelList:
     state = get_state(request)
     verify(request, state.settings.client_keys)
-    return ModelList(data=[ModelCard(id=m) for m in state.providers.models()])
+    return ModelList(
+        data=[ModelCard(id=m, owned_by=host) for m, host in state.providers.model_cards()]
+    )
 
 
 @router.post("/chat/completions")
@@ -168,7 +177,17 @@ async def chat_completions(request: Request, body: ChatCompletionRequest) -> Any
 
     cache_control = request.headers.get("x-cache-control", "")
     only_if_cached = "only-if-cached" in cache_control.lower()
-    provider, provider_name = state.providers.resolve(body.model)
+    decision = state.providers.route(body.model)
+    if decision.error:
+        raise CacheLLMError(400, decision.error, param="model", code="host_not_enabled")
+    provider = state.providers.provider_for(decision)
+    provider_name = decision.key
+    if decision.via in ("convention", "default"):
+        state.providers.refresh_soon()  # a host may have added this model since startup
+    # From here on the request carries the id the chosen host expects, so the
+    # cache keys, the price and the upstream call all agree on the same model.
+    if decision.upstream_model != body.model:
+        body = body.model_copy(update={"model": decision.upstream_model})
 
     with span(
         "cachellm.request",
@@ -203,7 +222,7 @@ async def chat_completions(request: Request, body: ChatCompletionRequest) -> Any
         # ------------------------------------------------------- cache hit
         if lookup.served_from_cache and state.cache is not None and lookup.entry is not None:
             entry = lookup.entry
-            saved = await state.cache.register_hit(lookup, body.model)
+            saved = await state.cache.register_hit(lookup, body.model, free=decision.local)
             state.metrics.observe_cost(body.model, saved, "saved")
             state.metrics.observe_tokens(
                 body.model, entry.prompt_tokens, entry.completion_tokens, "saved"
@@ -218,7 +237,9 @@ async def chat_completions(request: Request, body: ChatCompletionRequest) -> Any
                 saved_usd=saved,
                 prompt=body.last_user_text(),
             )
-            headers = cache_headers(lookup, total_ms=total_ms, saved_usd=saved)
+            headers = cache_headers(
+                lookup, total_ms=total_ms, saved_usd=saved, upstream=provider_name
+            )
             if body.stream:
                 return _replay_stream(body, entry, headers)
             payload = ChatCompletionResponse.from_text(
@@ -236,8 +257,12 @@ async def chat_completions(request: Request, body: ChatCompletionRequest) -> Any
 
         # ----------------------------------------------------------- miss
         if body.stream:
-            return await _proxy_stream(state, body, lookup, provider, provider_name, started)
-        return await _proxy_once(state, body, lookup, provider, provider_name, started)
+            return await _proxy_stream(
+                state, body, lookup, provider, provider_name, started, free=decision.local
+            )
+        return await _proxy_once(
+            state, body, lookup, provider, provider_name, started, free=decision.local
+        )
 
 
 async def _count_provider_error(state: AppState, provider_name: str) -> None:
@@ -253,6 +278,8 @@ async def _proxy_once(
     provider: Provider,
     provider_name: str,
     started: float,
+    *,
+    free: bool = False,
 ) -> JSONResponse:
     """Non-streaming miss: one upstream call, shared by identical concurrent misses."""
     coalesce_key = f"{lookup.namespace}:{lookup.exact}" if lookup.namespace else ""
@@ -290,7 +317,7 @@ async def _proxy_once(
             tool_calls=result.tool_calls,
         )
 
-    spent = estimate_cost(body.model, result.prompt_tokens, result.completion_tokens)
+    spent = estimate_cost(body.model, result.prompt_tokens, result.completion_tokens, free=free)
     state.metrics.observe_cost(body.model, spent, "spent")
     state.metrics.observe_tokens(
         body.model, result.prompt_tokens, result.completion_tokens, "spent"
@@ -318,7 +345,10 @@ async def _proxy_once(
     ).model_dump()
     payload["cachellm"] = _debug_block(lookup, 0.0, coalesced)
     return JSONResponse(
-        payload, headers=cache_headers(lookup, total_ms=total_ms, coalesced=coalesced)
+        payload,
+        headers=cache_headers(
+            lookup, total_ms=total_ms, coalesced=coalesced, upstream=provider_name
+        ),
     )
 
 
@@ -356,6 +386,8 @@ async def _proxy_stream(
     provider: Provider,
     provider_name: str,
     started: float,
+    *,
+    free: bool = False,
 ) -> StreamingResponse:
     """Streaming miss: forward chunks live while buffering for the cache.
 
@@ -437,7 +469,7 @@ async def _proxy_stream(
                 completion_tokens=completion_tokens,
                 finish_reason=finish_reason or "stop",
             )
-        spent = estimate_cost(body.model, prompt_tokens, completion_tokens)
+        spent = estimate_cost(body.model, prompt_tokens, completion_tokens, free=free)
         state.metrics.observe_cost(body.model, spent, "spent")
         state.metrics.observe_tokens(body.model, prompt_tokens, completion_tokens, "spent")
         if state.analytics is not None:
@@ -457,5 +489,5 @@ async def _proxy_stream(
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
-        headers=cache_headers(lookup, total_ms=total_ms),
+        headers=cache_headers(lookup, total_ms=total_ms, upstream=provider_name),
     )

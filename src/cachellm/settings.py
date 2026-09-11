@@ -177,6 +177,15 @@ class Settings(BaseSettings):
     fake_latency_ms: float = 0.0
     openai_base_url: str = "https://api.openai.com/v1"
     openai_api_key: str = ""
+    #: Which hosts to route between, as catalog keys such as "gemini,groq".
+    #: Empty means every host this machine has a key for. The first one listed
+    #: becomes the default. With an explicit CACHELLM_OPENAI_BASE_URL, hosts
+    #: named here are added next to it rather than replacing it.
+    hosts: str = ""
+    #: Ask each host for its live model list at startup, so a name goes to the
+    #: host that actually serves it. Off leaves naming rules and the default.
+    discover_models: bool = True
+    discover_timeout: float = 4.0
     request_timeout: float = 120.0
     provider_max_retries: int = 2
 

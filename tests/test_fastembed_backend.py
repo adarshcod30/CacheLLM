@@ -78,3 +78,12 @@ async def test_an_empty_batch_is_free() -> None:
     emb, model = embedder()
     assert await emb.embed_batch([]) == []
     assert model.seen == []
+
+
+async def test_an_uncached_copy_shares_the_model_and_never_caches() -> None:
+    emb, model = embedder()
+    await emb.embed("warm")
+    copy = emb.uncached()
+    await copy.embed("same")
+    await copy.embed("same")
+    assert model.seen == ["warm", "same", "same"], "the copy should run the shared model each time"

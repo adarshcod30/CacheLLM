@@ -195,19 +195,18 @@ def request_table(records: list[dict[str, Any]], limit: int = 15) -> str:
 
 def providers_table(payload: dict[str, Any], detected: list[dict[str, Any]]) -> str:
     """Every host, and which of them this machine can reach right now."""
-    out = ["", f"  {BOLD}Ready to use on this machine{RESET}", ""]
+    out = ["", f"  {BOLD}This proxy routes to{RESET}", ""]
     if detected:
-        for i, d in enumerate(detected, 1):
-            mark = f"{GREEN}✓{RESET}" if i == 1 else " "
-            chosen = f"  {DIM}(chosen by default){RESET}" if i == 1 else ""
-            out.append(f"  {mark} {d['name']:<28}{DIM}{d['reason']}{RESET}{chosen}")
+        for d in detected:
+            chosen = f"  {DIM}(default){RESET}" if d.get("default") else ""
+            out.append(f"  {GREEN}✓{RESET} {d['name']:<28}{DIM}{d['reason']}{RESET}{chosen}")
     else:
         out.append(f"  {DIM}nothing detected; the built-in test double is always available{RESET}")
 
     out += [
         "",
         f"  {BOLD}Everything supported{RESET}",
-        f"  {DIM}set CACHELLM_OPENAI_BASE_URL and the matching key{RESET}",
+        f"  {DIM}export a host's key and it joins the routes when the proxy starts{RESET}",
         "",
     ]
     out.append(f"  {BOLD}{'host':<26} {'api key variable':<22} {'example model'}{RESET}")
