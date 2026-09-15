@@ -37,3 +37,9 @@ results/live/*.log
 CLAUDE.md
 AGENTS.md
 .DS_Store
+
+# secrets, build output and local noise
+.env.local
+.venv/
+venv/
+.ipynb_checkpoints/
