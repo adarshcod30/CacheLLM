@@ -32,3 +32,8 @@ CLAUDE.local.md
 
 # A live check keeps its proxy log only when it fails, for debugging
 results/live/*.log
+
+# local agent and editor files, never committed
+CLAUDE.md
+AGENTS.md
+.DS_Store
